@@ -38,7 +38,8 @@ Game_Memory :: struct {
 	player_texture:  rl.Texture,
 	some_number:     int,
 	run:             bool,
-	laberintoActual: Laberinto,
+	laberintoActual: [dynamic]Pared,
+	pared:           []Pared,
 }
 
 g: ^Game_Memory
@@ -137,7 +138,7 @@ game_init :: proc() {
 		// You can put textures, sounds and music in the `assets` folder. Those
 		// files will be part any release or web build.
 		player_texture  = rl.LoadTexture("assets/round_cat.png"),
-		laberintoActual = crearLaberinto(3, 3, 1),
+		laberintoActual = crearLaberinto(4, 6, 1),
 	}
 
 	game_hot_reloaded(g)
