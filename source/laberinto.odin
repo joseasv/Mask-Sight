@@ -2,6 +2,7 @@ package game
 
 import cq "core:container/queue"
 import "core:fmt"
+import "core:math"
 import "core:math/rand"
 import "core:slice"
 import rl "vendor:raylib"
@@ -366,6 +367,34 @@ resolverColisionesJugador :: proc() {
 
 		// usar CheckCollisionRecs para detección simple
 		if rl.CheckCollisionRecs(pr, wa) {
+			// if this is an internal wall and currently hidden, trigger screen shake + stun and push player
+			if p.tipo == 1 && !g.show_internal_walls {
+				// push player opposite from wall center
+				wall_cx := wa.x + wa.width / 2
+				wall_cy := wa.y + wa.height / 2
+				dx := g.player_pos.x - wall_cx
+				dy := g.player_pos.y - wall_cy
+				len := math.sqrt(dx * dx + dy * dy)
+				nx := f32(0.0)
+				ny := f32(0.0)
+				if len == 0.0 {
+					nx = 0.0
+					ny = -1.0
+				} else {
+					nx = dx / len
+					ny = dy / len
+				}
+				pushDist := f32(40) / f32(4)
+				g.player_pos.x += nx * pushDist
+				g.player_pos.y += ny * pushDist
+				g.stun_timer = f32(2.0)
+				g.shake_timer = f32(1.0)
+				// update player AABB after push
+				g.player_aabb.x = g.player_pos.x - g.player_aabb.width / 2
+				g.player_aabb.y = g.player_pos.y - g.player_aabb.height / 2
+				pr = g.player_aabb
+				continue
+			}
 			// calcular overlap
 			right := pr.x + pr.width
 			if wa.x + wa.width < right {
