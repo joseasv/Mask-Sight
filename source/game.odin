@@ -35,6 +35,14 @@ import rl "vendor:raylib"
 
 PIXEL_WINDOW_HEIGHT :: 180
 
+GameState :: enum {
+	Title,
+	Select,
+	Story,
+	Play,
+	Final,
+}
+
 Game_Memory :: struct {
 	player_pos:           rl.Vector2,
 	player_texture:       rl.Texture,
@@ -59,6 +67,11 @@ Game_Memory :: struct {
 	shake_timer:          f32,
 	stun_timer:           f32,
 	enemies:              [dynamic]Enemy,
+	// state system
+	state_requested:      int, // -1 = none, otherwise GameState
+	selected_difficulty:  int,
+	selected_character:   int,
+	reached_exit:         bool,
 }
 
 g: ^Game_Memory
@@ -70,13 +83,13 @@ Collectible :: struct {
 }
 
 Enemy :: struct {
-	pos:   rl.Vector2,
-	aabb:  rl.Rectangle,
-	speed: f32,
-	hp:    int,
+	pos:         rl.Vector2,
+	aabb:        rl.Rectangle,
+	speed:       f32,
+	hp:          int,
 	flash_timer: f32,
-	dead_timer: f32,
-	alive: bool,
+	dead_timer:  f32,
+	alive:       bool,
 }
 
 game_camera :: proc() -> rl.Camera2D {
@@ -198,7 +211,18 @@ generate_enemies :: proc(rows: int, cols: int) {
 		size := f32(12)
 		aabb := rl.Rectangle{c.x - size / 2, c.y - size / 2, size, size}
 		sp := baseSpeed * speedFactor
-		append(&g.enemies, Enemy{pos = c, aabb = aabb, speed = sp, hp = 1, flash_timer = 0.0, dead_timer = 0.0, alive = true})
+		append(
+			&g.enemies,
+			Enemy {
+				pos = c,
+				aabb = aabb,
+				speed = sp,
+				hp = 1,
+				flash_timer = 0.0,
+				dead_timer = 0.0,
+				alive = true,
+			},
+		)
 	}
 }
 
@@ -271,18 +295,18 @@ update :: proc() {
 	if !g.show_internal_walls && g.fade_phase == 0 {
 		for i in 0 ..< len(g.enemies) {
 			e := &g.enemies[i]
-			if !e.alive { continue }
+			if !e.alive {continue}
 			// move towards player
 			dx := g.player_pos.x - e.pos.x
 			dy := g.player_pos.y - e.pos.y
-			dist := math.sqrt(dx*dx + dy*dy)
+			dist := math.sqrt(dx * dx + dy * dy)
 			if dist > 0.1 {
 				nx := dx / dist
 				ny := dy / dist
 				e.pos.x += nx * e.speed * dt
 				e.pos.y += ny * e.speed * dt
-				e.aabb.x = e.pos.x - e.aabb.width/2
-				e.aabb.y = e.pos.y - e.aabb.height/2
+				e.aabb.x = e.pos.x - e.aabb.width / 2
+				e.aabb.y = e.pos.y - e.aabb.height / 2
 			}
 		}
 	}
@@ -291,7 +315,7 @@ update :: proc() {
 	if g.show_internal_walls && g.fade_phase == 0 {
 		for i in 0 ..< len(g.enemies) {
 			e := &g.enemies[i]
-			if !e.alive { continue }
+			if !e.alive {continue}
 			if rl.CheckCollisionRecs(g.player_aabb, e.aabb) {
 				// only apply damage once per contact using flash_timer as cooldown
 				if e.flash_timer <= 0.0 {
@@ -314,6 +338,7 @@ update :: proc() {
 				if rl.CheckCollisionRecs(g.player_aabb, p.aabb) {
 					g.fade_phase = 1 // start fade out
 					g.fade_timer = 0.0
+					g.reached_exit = true
 
 					break
 				}
@@ -373,7 +398,7 @@ update :: proc() {
 			e := &g.enemies[i]
 			if e.flash_timer > 0.0 {
 				e.flash_timer -= dt
-				if e.flash_timer < 0.0 { e.flash_timer = 0.0 }
+				if e.flash_timer < 0.0 {e.flash_timer = 0.0}
 			}
 			if e.dead_timer > 0.0 {
 				e.dead_timer -= dt
@@ -407,11 +432,11 @@ update :: proc() {
 						py := f32(rr) * tamCelda + tamCelda / 2
 						dx := px - g.player_pos.x
 						dy := py - g.player_pos.y
-						if dx*dx+dy*dy >= (tamCelda*tamCelda*9) {
+						if dx * dx + dy * dy >= (tamCelda * tamCelda * 9) {
 							// accept
 							e.pos = rl.Vector2{px, py}
 							size := f32(12)
-							e.aabb = rl.Rectangle{px - size/2, py - size/2, size, size}
+							e.aabb = rl.Rectangle{px - size / 2, py - size / 2, size, size}
 							e.hp = 1
 							e.flash_timer = 0.0
 							e.dead_timer = 0.0
@@ -422,11 +447,11 @@ update :: proc() {
 					}
 					if !placed {
 						// fallback: place at opposite of player
-						px := g.player_pos.x + tamCelda*4
-						py := g.player_pos.y + tamCelda*4
+						px := g.player_pos.x + tamCelda * 4
+						py := g.player_pos.y + tamCelda * 4
 						e.pos = rl.Vector2{px, py}
 						size := f32(12)
-						e.aabb = rl.Rectangle{px - size/2, py - size/2, size, size}
+						e.aabb = rl.Rectangle{px - size / 2, py - size / 2, size, size}
 						e.hp = 1
 						e.flash_timer = 0.0
 						e.dead_timer = 0.0
@@ -444,23 +469,32 @@ update :: proc() {
 		fade_duration := f32(2.0)
 		if g.fade_phase == 1 {
 			if g.fade_timer >= fade_duration {
-				// generate new maze with increased rows or cols by 2
-				choices := make([dynamic]int, 0)
-				append(&choices, 0)
-				append(&choices, 1)
-				rand.shuffle(choices[:])
-				newRows := g.maze_rows
-				newCols := g.maze_cols
-				if choices[0] == 0 {
-					newRows += 2
+				if g.reached_exit {
+					// player reached exit -> go to Final state
+					g.state_requested = int(GameState.Final)
+					g.reached_exit = false
+					// reset fade
+					g.fade_phase = 0
+					g.fade_timer = 0.0
 				} else {
-					newCols += 2
-				}
-				start_new_maze(newRows, newCols)
+					// generate new maze with increased rows or cols by 2
+					choices := make([dynamic]int, 0)
+					append(&choices, 0)
+					append(&choices, 1)
+					rand.shuffle(choices[:])
+					newRows := g.maze_rows
+					newCols := g.maze_cols
+					if choices[0] == 0 {
+						newRows += 2
+					} else {
+						newCols += 2
+					}
+					start_new_maze(newRows, newCols)
 
-				// switch to fade in
-				g.fade_phase = 2
-				g.fade_timer = 0.0
+					// switch to fade in
+					g.fade_phase = 2
+					g.fade_timer = 0.0
+				}
 			}
 		} else if g.fade_phase == 2 {
 			if g.fade_timer >= fade_duration {
@@ -505,7 +539,7 @@ draw :: proc() {
 	// dibujar enemigos (fantasmas)
 	for i in 0 ..< len(g.enemies) {
 		e := &g.enemies[i]
-		if !e.alive && e.dead_timer <= 0.0 { continue }
+		if !e.alive && e.dead_timer <= 0.0 {continue}
 
 		// base alpha: visible when internal walls shown, otherwise faint
 		baseAlpha := f32(64)
@@ -524,10 +558,18 @@ draw :: proc() {
 		// if flashing, draw bright (white) overlay
 		if e.flash_timer > 0.0 {
 			col := rl.Color{u8(255), u8(255), u8(255), alpha}
-			rl.DrawRectangleV({e.pos.x - e.aabb.width/2, e.pos.y - e.aabb.height/2}, {e.aabb.width, e.aabb.height}, col)
+			rl.DrawRectangleV(
+				{e.pos.x - e.aabb.width / 2, e.pos.y - e.aabb.height / 2},
+				{e.aabb.width, e.aabb.height},
+				col,
+			)
 		} else {
 			col := rl.Color{u8(255), u8(0), u8(0), alpha}
-			rl.DrawRectangleV({e.pos.x - e.aabb.width/2, e.pos.y - e.aabb.height/2}, {e.aabb.width, e.aabb.height}, col)
+			rl.DrawRectangleV(
+				{e.pos.x - e.aabb.width / 2, e.pos.y - e.aabb.height / 2},
+				{e.aabb.width, e.aabb.height},
+				col,
+			)
 		}
 	}
 	dibujarLaberinto()
@@ -571,8 +613,9 @@ draw :: proc() {
 
 @(export)
 game_update :: proc() {
-	update()
-	draw()
+	// Delegate update/draw to state machine
+	state_machine_update()
+	state_machine_draw()
 
 	// Everything on tracking allocator is valid until end-of-frame.
 	free_all(context.temp_allocator)
@@ -637,6 +680,9 @@ game_init :: proc() {
 	// generar collectibles y enemigos usando helpers
 	generate_collectibles(rows, cols)
 	generate_enemies(rows, cols)
+
+	// initialize state machine
+	state_machine_init()
 }
 
 @(export)
