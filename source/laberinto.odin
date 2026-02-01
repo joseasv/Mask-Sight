@@ -14,6 +14,7 @@ Pared :: struct {
 	color:     rl.Color,
 	thickness: f32,
 	aabb:      rl.Rectangle,
+	revelada:  bool,
 }
 
 Laberinto :: struct {
@@ -67,7 +68,8 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 	visitados[vEntrada] = true
 	laberinto.distancias[vEntrada] = 0
 
-	if dificultad == 1 {
+	if dificultad < 3 {
+		// recorrido en anchura
 		cola: cq.Queue(int)
 		cq.init(&cola)
 		cq.push(&cola, vEntrada)
@@ -90,14 +92,14 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 						for vertice, i in laberinto.ady[w] {
 							if vertice == v {
 								unordered_remove(&laberinto.ady[w], i)
-								fmt.println("quitando el vertice", v, "en la posicion", i)
+
 								break
 							}
 						}
 						for vertice2, j in laberinto.ady[v] {
 							if vertice2 == w {
 								unordered_remove(&laberinto.ady[v], j)
-								fmt.println("quitando el vertice", w, "en la posicion", j)
+
 								break
 							}
 						}
@@ -108,7 +110,48 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 
 		fmt.println(laberinto)
 	} else {
+		// recorrido en profundidad (DFS iterativo)
+		stack := make([dynamic]int, 0)
+		append(&stack, vEntrada)
+		visitados[vEntrada] = true
+		laberinto.distancias[vEntrada] = 0
 
+		for len(stack) > 0 {
+			v := stack[len(stack) - 1]
+			vecinosDesorden := laberinto.ady[v][:]
+			rand.shuffle(vecinosDesorden)
+			pushed := false
+			for w in vecinosDesorden {
+				if !visitados[w] {
+					visitados[w] = true
+					laberinto.predecesores[w] = v
+					laberinto.distancias[w] = laberinto.distancias[v] + 1
+					append(&stack, w)
+					pushed = true
+					break
+				} else {
+					if laberinto.predecesores[v] != w {
+						// quitar la conexion en ambas direcciones entre v y w
+						for vertice, i in laberinto.ady[w] {
+							if vertice == v {
+								unordered_remove(&laberinto.ady[w], i)
+								break
+							}
+						}
+						for vertice2, j in laberinto.ady[v] {
+							if vertice2 == w {
+								unordered_remove(&laberinto.ady[v], j)
+								break
+							}
+						}
+					}
+				}
+			}
+			if !pushed {
+				// backtrack
+				unordered_remove(&stack, len(stack) - 1)
+			}
+		}
 	}
 
 	// Construir slice de paredes a partir del grafo resultante
@@ -218,6 +261,7 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 						color = rl.YELLOW,
 						thickness = thickness,
 						aabb = aabb,
+						revelada = false,
 					},
 				)
 			}
@@ -256,6 +300,7 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 						color = rl.YELLOW,
 						thickness = thickness,
 						aabb = aabb,
+						revelada = false,
 					},
 				)
 			}
@@ -293,6 +338,7 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 						color = rl.YELLOW,
 						thickness = thickness,
 						aabb = aabb,
+						revelada = false,
 					},
 				)
 			}
@@ -330,6 +376,7 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 						color = rl.YELLOW,
 						thickness = thickness,
 						aabb = aabb,
+						revelada = false,
 					},
 				)
 			}
@@ -345,7 +392,8 @@ dibujarLaberinto :: proc() {
 
 	for p in paredes {
 		// no dibujar paredes internas (tipo == 1) a menos que el flag esté activo
-		if p.tipo == 1 && !g.show_internal_walls {
+		// Las paredes que han sido reveladas deben mostrarse siempre
+		if p.tipo == 1 && !g.show_internal_walls && !p.revelada {
 			continue
 		}
 		draw_color := p.color
@@ -369,31 +417,38 @@ resolverColisionesJugador :: proc() {
 		if rl.CheckCollisionRecs(pr, wa) {
 			// if this is an internal wall and currently hidden, trigger screen shake + stun and push player
 			if p.tipo == 1 && !g.show_internal_walls {
-				// push player opposite from wall center
-				wall_cx := wa.x + wa.width / 2
-				wall_cy := wa.y + wa.height / 2
-				dx := g.player_pos.x - wall_cx
-				dy := g.player_pos.y - wall_cy
-				len := math.sqrt(dx * dx + dy * dy)
-				nx := f32(0.0)
-				ny := f32(0.0)
-				if len == 0.0 {
-					nx = 0.0
-					ny = -1.0
+				// if wall already revealed, treat as visible (no stun)
+				if p.revelada {
+					// fallthrough to normal resolution below
 				} else {
-					nx = dx / len
-					ny = dy / len
+					// reveal this wall permanently for this level
+					g.laberintoActual[i].revelada = true
+					// push player opposite from wall center and apply stun/shake once
+					wall_cx := wa.x + wa.width / 2
+					wall_cy := wa.y + wa.height / 2
+					dx := g.player_pos.x - wall_cx
+					dy := g.player_pos.y - wall_cy
+					len := math.sqrt(dx * dx + dy * dy)
+					nx := f32(0.0)
+					ny := f32(0.0)
+					if len == 0.0 {
+						nx = 0.0
+						ny = -1.0
+					} else {
+						nx = dx / len
+						ny = dy / len
+					}
+					pushDist := f32(40) / f32(4)
+					g.player_pos.x += nx * pushDist
+					g.player_pos.y += ny * pushDist
+					g.stun_timer = f32(2.0)
+					g.shake_timer = f32(1.0)
+					// update player AABB after push
+					g.player_aabb.x = g.player_pos.x - g.player_aabb.width / 2
+					g.player_aabb.y = g.player_pos.y - g.player_aabb.height / 2
+					pr = g.player_aabb
+					continue
 				}
-				pushDist := f32(40) / f32(4)
-				g.player_pos.x += nx * pushDist
-				g.player_pos.y += ny * pushDist
-				g.stun_timer = f32(2.0)
-				g.shake_timer = f32(1.0)
-				// update player AABB after push
-				g.player_aabb.x = g.player_pos.x - g.player_aabb.width / 2
-				g.player_aabb.y = g.player_pos.y - g.player_aabb.height / 2
-				pr = g.player_aabb
-				continue
 			}
 			// calcular overlap
 			right := pr.x + pr.width

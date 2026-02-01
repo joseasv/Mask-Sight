@@ -72,6 +72,9 @@ Game_Memory :: struct {
 	selected_difficulty:  int,
 	selected_character:   int,
 	reached_exit:         bool,
+	player_hp:            int,
+	inv_timer:            f32,
+	current_level:        int,
 }
 
 g: ^Game_Memory
@@ -125,20 +128,7 @@ color_lerp :: proc(a, b: rl.Color, t: f32) -> rl.Color {
 generate_collectibles :: proc(rows: int, cols: int) {
 	g.collectibles = make([dynamic]Collectible, 0)
 
-	minVal := rows
-	maxVal := cols
-	if minVal > maxVal {
-		tmp := minVal
-		minVal = maxVal
-		maxVal = tmp
-	}
-
-	counts := make([dynamic]int, 0)
-	for n in minVal ..< (maxVal + 1) {
-		append(&counts, n)
-	}
-	rand.shuffle(counts[:])
-	numCollectibles := counts[0]
+	numCollectibles := rl.GetRandomValue(i32(rows), i32(cols))
 
 	// candidatos de celdas (excluir entrada/salida)
 	candidates := make([dynamic]int, 0)
@@ -192,14 +182,9 @@ generate_enemies :: proc(rows: int, cols: int) {
 	// number of enemies: random between min(rows,cols) and max(rows,cols)
 	minVal := 2
 	maxVal := 4
-	if minVal > maxVal {tmp := minVal; minVal = maxVal; maxVal = tmp}
-	counts := make([dynamic]int, 0)
-	for n in minVal ..< (maxVal + 1) {
-		append(&counts, n)
-	}
-	rand.shuffle(counts[:])
-	num := counts[0]
-	if num > len(candidates) {num = len(candidates)}
+
+	num := rl.GetRandomValue(i32(minVal), i32(maxVal))
+	if num > i32(len(candidates)) {num = i32(len(candidates))}
 
 	rand.shuffle(candidates[:])
 	// speed scales with maze size (rows+cols)
@@ -237,6 +222,9 @@ start_new_maze :: proc(newRows: int, newCols: int) {
 	g.maze_cols = newCols
 	g.vEntrada = vEnt
 	g.vSalida = vSal
+
+	// reset player HP at level start
+	g.player_hp = 3
 
 	// colocar jugador en la celda de entrada
 	tamCelda := f32(40)
@@ -392,6 +380,12 @@ update :: proc() {
 			if g.stun_timer < 0.0 {g.stun_timer = 0.0}
 		}
 
+		// invincibility timer (player recently hit)
+		if g.inv_timer > 0.0 {
+			g.inv_timer -= dt
+			if g.inv_timer < 0.0 {g.inv_timer = 0.0}
+		}
+
 		// update enemy flash/dead timers and respawn dead enemies at border far from player
 		tamCelda := f32(40)
 		for i in 0 ..< len(g.enemies) {
@@ -470,21 +464,31 @@ update :: proc() {
 		if g.fade_phase == 1 {
 			if g.fade_timer >= fade_duration {
 				if g.reached_exit {
-					// player reached exit -> go to Final state
-					g.state_requested = int(GameState.Final)
-					g.reached_exit = false
-					// reset fade
-					g.fade_phase = 0
-					g.fade_timer = 0.0
+					// level progression: up to 5 levels
+					if g.current_level < 5 {
+						g.current_level += 1
+						// make next maze larger
+						newRows := g.maze_rows + 2
+						newCols := g.maze_cols + 2
+						start_new_maze(newRows, newCols)
+						// switch to fade in
+						g.fade_phase = 2
+						g.fade_timer = 0.0
+						g.reached_exit = false
+					} else {
+						// final level completed -> go to Final state
+						g.state_requested = int(GameState.Final)
+						g.reached_exit = false
+						// reset fade
+						g.fade_phase = 0
+						g.fade_timer = 0.0
+					}
 				} else {
-					// generate new maze with increased rows or cols by 2
-					choices := make([dynamic]int, 0)
-					append(&choices, 0)
-					append(&choices, 1)
-					rand.shuffle(choices[:])
+					// generate new maze with increased rows or cols by 2 (fallback path)
+
 					newRows := g.maze_rows
 					newCols := g.maze_cols
-					if choices[0] == 0 {
+					if rl.GetRandomValue(0, 1) == 0 {
 						newRows += 2
 					} else {
 						newCols += 2
@@ -514,19 +518,27 @@ draw :: proc() {
 	rl.ClearBackground(rl.BLACK)
 
 	rl.BeginMode2D(game_camera())
-	// dibujar la textura centrada en `g.player_pos`
-	rl.DrawTextureEx(
-		g.player_texture,
-		rl.Vector2 {
-			g.player_pos.x - f32(g.player_texture.width) / 2,
-			g.player_pos.y - f32(g.player_texture.height) / 2,
-		},
-		0,
-		1,
-		g.player_tint,
-	)
-	rl.DrawRectangleV({20, 20}, {10, 10}, rl.RED)
-	rl.DrawRectangleV({-30, -20}, {10, 10}, rl.GREEN)
+	// dibujar la textura centrada en `g.player_pos` (parpadeo si invencible)
+	visible := true
+	if g.inv_timer > 0.0 {
+		// blink frequency ~5 Hz
+		if (i32(rl.GetTime() * 5.0) % 2) == 0 {
+			visible = false
+		}
+	}
+	if visible {
+		rl.DrawTextureEx(
+			g.player_texture,
+			rl.Vector2 {
+				g.player_pos.x - f32(g.player_texture.width) / 2,
+				g.player_pos.y - f32(g.player_texture.height) / 2,
+			},
+			0,
+			1,
+			g.player_tint,
+		)
+	}
+
 
 	// dibujar collectibles
 	for c in g.collectibles {
@@ -577,16 +589,21 @@ draw :: proc() {
 
 	rl.BeginMode2D(ui_camera())
 
-	// NOTE: `fmt.ctprintf` uses the temp allocator. The temp allocator is
-	// cleared at the end of the frame by the main application, meaning inside
-	// `main_hot_reload.odin`, `main_release.odin` or `main_web_entry.odin`.
-	rl.DrawText(
-		fmt.ctprintf("some_number: %v\nplayer_pos: %v", g.some_number, g.player_pos),
-		5,
-		5,
-		8,
-		rl.WHITE,
-	)
+	// Draw HP in top-right corner (UI camera coordinates)
+	ui_w := PIXEL_WINDOW_HEIGHT * f32(rl.GetScreenWidth()) / f32(rl.GetScreenHeight())
+	label_x := i32(ui_w) - 120
+	rl.DrawText("HP", label_x, 5, 12, rl.WHITE)
+	boxSize := i32(10)
+	gap := i32(4)
+	boxStartX := i32(ui_w) - 80
+	for k in 0 ..< 3 {
+		bx := boxStartX + i32(k) * (boxSize + gap)
+		if k < g.player_hp {
+			rl.DrawRectangle(bx, 6, boxSize, boxSize, rl.RED)
+		} else {
+			rl.DrawRectangle(bx, 6, boxSize, boxSize, rl.DARKGRAY)
+		}
+	}
 
 	rl.EndMode2D()
 
@@ -660,6 +677,9 @@ game_init :: proc() {
 		maze_rows            = rows,
 		maze_cols            = cols,
 		collectibles         = make([dynamic]Collectible, 0),
+		player_hp            = 3,
+		inv_timer            = 0.0,
+		current_level        = 1,
 		fade_phase           = 0,
 		fade_timer           = 0.0,
 		laberintoActual      = paredes,
