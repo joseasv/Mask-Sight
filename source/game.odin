@@ -33,6 +33,8 @@ import "core:math/linalg"
 import "core:math/rand"
 import rl "vendor:raylib"
 
+Rect :: rl.Rectangle
+
 PIXEL_WINDOW_HEIGHT :: 180
 
 GameState :: enum {
@@ -75,6 +77,8 @@ Game_Memory :: struct {
 	player_hp:            int,
 	inv_timer:            f32,
 	current_level:        int,
+	atlas:                rl.Texture,
+	titulo:               rl.Texture,
 }
 
 g: ^Game_Memory
@@ -110,7 +114,7 @@ game_camera :: proc() -> rl.Camera2D {
 		target = rl.Vector2{g.player_pos.x + rx, g.player_pos.y + ry}
 	}
 
-	return {zoom = h / PIXEL_WINDOW_HEIGHT, target = target, offset = {w / 2, h / 2}}
+	return {zoom = 1, target = target, offset = {w / 2, h / 2}}
 }
 
 color_lerp :: proc(a, b: rl.Color, t: f32) -> rl.Color {
@@ -143,7 +147,7 @@ generate_collectibles :: proc(rows: int, cols: int) {
 	}
 	rand.shuffle(candidates[:])
 
-	tamCelda := f32(40)
+	tamCelda := f32(150)
 	for i in 0 ..< numCollectibles {
 		v := candidates[i]
 		cc := v % cols
@@ -212,7 +216,7 @@ generate_enemies :: proc(rows: int, cols: int) {
 }
 
 start_new_maze :: proc(newRows: int, newCols: int) {
-	paredes, vEnt, vSal := crearLaberinto(newRows, newCols, 1)
+	paredes, vEnt, vSal := crearLaberinto(newRows, newCols, g.current_level)
 	// start each new maze with the internal walls revealed for 3s
 	g.internal_walls_timer = f32(3.0)
 	g.show_internal_walls = true
@@ -252,6 +256,8 @@ update :: proc() {
 	dt := rl.GetFrameTime()
 
 	// movement disabled while fading
+	vel: f32 = 250
+
 	if g.fade_phase == 0 && g.stun_timer <= 0.0 {
 		if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) {
 			input.y -= 1
@@ -266,7 +272,7 @@ update :: proc() {
 			input.x += 1
 		}
 		input = linalg.normalize0(input)
-		g.player_pos += input * dt * 100
+		g.player_pos += input * dt * vel
 	}
 
 	g.some_number += 1
@@ -464,8 +470,8 @@ update :: proc() {
 		if g.fade_phase == 1 {
 			if g.fade_timer >= fade_duration {
 				if g.reached_exit {
-					// level progression: up to 5 levels
-					if g.current_level < 5 {
+					// level progression: up to 4 levels
+					if g.current_level < 4 {
 						g.current_level += 1
 						// make next maze larger
 						newRows := g.maze_rows + 2
@@ -685,6 +691,8 @@ game_init :: proc() {
 		laberintoActual      = paredes,
 		vEntrada             = vEnt,
 		vSalida              = vSal,
+		titulo               = rl.LoadTexture("assets/titulo.png"),
+		atlas                = rl.LoadTexture("assets/atlas.png"),
 	}
 
 	// inicializar player_aabb ahora que la textura está cargada en g

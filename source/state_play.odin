@@ -5,7 +5,7 @@ import rl "vendor:raylib"
 state_play_on_enter :: proc() {
 	// start maze based on selected difficulty
 	// reset level counter when entering Play
-	g.current_level = 1
+
 	if g.selected_difficulty == 1 {
 		start_new_maze(4, 6)
 	} else if g.selected_difficulty == 2 {

@@ -1,7 +1,7 @@
 package game
 
 import cq "core:container/queue"
-import "core:fmt"
+//import "core:fmt"
 import "core:math"
 import "core:math/rand"
 import "core:slice"
@@ -68,8 +68,8 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 	visitados[vEntrada] = true
 	laberinto.distancias[vEntrada] = 0
 
-	if dificultad < 3 {
-		// recorrido en anchura
+	if dificultad >= 0 {
+		// recorrido en anchura (BFS)
 		cola: cq.Queue(int)
 		cq.init(&cola)
 		cq.push(&cola, vEntrada)
@@ -92,14 +92,12 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 						for vertice, i in laberinto.ady[w] {
 							if vertice == v {
 								unordered_remove(&laberinto.ady[w], i)
-
 								break
 							}
 						}
 						for vertice2, j in laberinto.ady[v] {
 							if vertice2 == w {
 								unordered_remove(&laberinto.ady[v], j)
-
 								break
 							}
 						}
@@ -108,54 +106,13 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 			}
 		}
 
-		fmt.println(laberinto)
 	} else {
 		// recorrido en profundidad (DFS iterativo)
-		stack := make([dynamic]int, 0)
-		append(&stack, vEntrada)
-		visitados[vEntrada] = true
-		laberinto.distancias[vEntrada] = 0
 
-		for len(stack) > 0 {
-			v := stack[len(stack) - 1]
-			vecinosDesorden := laberinto.ady[v][:]
-			rand.shuffle(vecinosDesorden)
-			pushed := false
-			for w in vecinosDesorden {
-				if !visitados[w] {
-					visitados[w] = true
-					laberinto.predecesores[w] = v
-					laberinto.distancias[w] = laberinto.distancias[v] + 1
-					append(&stack, w)
-					pushed = true
-					break
-				} else {
-					if laberinto.predecesores[v] != w {
-						// quitar la conexion en ambas direcciones entre v y w
-						for vertice, i in laberinto.ady[w] {
-							if vertice == v {
-								unordered_remove(&laberinto.ady[w], i)
-								break
-							}
-						}
-						for vertice2, j in laberinto.ady[v] {
-							if vertice2 == w {
-								unordered_remove(&laberinto.ady[v], j)
-								break
-							}
-						}
-					}
-				}
-			}
-			if !pushed {
-				// backtrack
-				unordered_remove(&stack, len(stack) - 1)
-			}
-		}
 	}
 
 	// Construir slice de paredes a partir del grafo resultante
-	tamCelda := f32(40)
+	tamCelda := f32(150)
 	paredes := make([dynamic]Pared, 0)
 
 	// elegir vSalida: el vértice del borde más lejano desde vEntrada

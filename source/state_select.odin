@@ -3,6 +3,7 @@ package game
 import rl "vendor:raylib"
 
 state_select_on_enter :: proc() {
+	g.current_level = 0
 	if g.selected_character < 0 || g.selected_character > 1 {g.selected_character = 0}
 }
 
