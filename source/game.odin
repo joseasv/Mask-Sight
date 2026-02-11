@@ -75,8 +75,12 @@ Game_Memory :: struct {
 	selected_character:   int,
 	reached_exit:         bool,
 	player_hp:            int,
+	player_flip:          bool,
+	player_size:          [2]f32,
 	inv_timer:            f32,
 	current_level:        int,
+	runAnim:              AnimationFromAtlas,
+	runAttackAnim:        AnimationFromAtlas,
 	atlas:                rl.Texture,
 	titulo:               rl.Texture,
 }
@@ -238,9 +242,13 @@ start_new_maze :: proc(newRows: int, newCols: int) {
 		f32(col) * tamCelda + tamCelda / 2,
 		f32(row) * tamCelda + tamCelda / 2,
 	}
+
+	g.player_aabb.width = g.player_size.x
+	g.player_aabb.height = g.player_size.y
 	g.player_aabb.x = g.player_pos.x - g.player_aabb.width / 2
 	g.player_aabb.y = g.player_pos.y - g.player_aabb.height / 2
 
+	fmt.println("start_new_maze player aabb", g.player_aabb)
 	// generar nuevos collectibles
 	generate_collectibles(newRows, newCols)
 	// generar nuevos enemigos
@@ -255,8 +263,15 @@ update :: proc() {
 	input: rl.Vector2
 	dt := rl.GetFrameTime()
 
+	if g.internal_walls_timer > 0.0 {
+		animation_update(&g.runAttackAnim, dt)
+	} else {
+		animation_update(&g.runAnim, dt)
+	}
+
+
 	// movement disabled while fading
-	vel: f32 = 250
+	vel: f32 = 350
 
 	if g.fade_phase == 0 && g.stun_timer <= 0.0 {
 		if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) {
@@ -266,9 +281,11 @@ update :: proc() {
 			input.y += 1
 		}
 		if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.A) {
+			g.player_flip = true
 			input.x -= 1
 		}
 		if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.D) {
+			g.player_flip = false
 			input.x += 1
 		}
 		input = linalg.normalize0(input)
@@ -279,10 +296,10 @@ update :: proc() {
 
 	// actualizar AABB del jugador (rect centrado en player_pos)
 	g.player_aabb = rl.Rectangle {
-		x      = g.player_pos.x - f32(g.player_texture.width) / 2,
-		y      = g.player_pos.y - f32(g.player_texture.height) / 2,
-		width  = f32(g.player_texture.width),
-		height = f32(g.player_texture.height),
+		x      = g.player_pos.x - g.player_size.x / 2,
+		y      = g.player_pos.y - g.player_size.y / 2,
+		width  = g.player_size.x,
+		height = g.player_size.y,
 	}
 
 	// move enemies when internal walls are hidden and not fading
@@ -532,7 +549,30 @@ draw :: proc() {
 			visible = false
 		}
 	}
-	if visible {
+
+	if g.internal_walls_timer > 0.0 {
+		if visible {
+			animation_atlas_draw(
+				g.runAttackAnim,
+				rl.Vector2 {
+					g.player_pos.x - g.player_size.x / 2,
+					g.player_pos.y - g.player_size.y / 2,
+				},
+				g.player_flip,
+			)
+		}
+
+
+	} else {
+		animation_atlas_draw(
+			g.runAnim,
+			rl.Vector2{g.player_pos.x - g.player_size.x / 2, g.player_pos.y - g.player_size.y / 2},
+			g.player_flip,
+		)
+	}
+
+
+	/*if visible {
 		rl.DrawTextureEx(
 			g.player_texture,
 			rl.Vector2 {
@@ -543,7 +583,7 @@ draw :: proc() {
 			1,
 			g.player_tint,
 		)
-	}
+	}*/
 
 
 	// dibujar collectibles
@@ -591,6 +631,16 @@ draw :: proc() {
 		}
 	}
 	dibujarLaberinto()
+
+
+	rl.DrawRectangleLines(
+		i32(g.player_aabb.x),
+		i32(g.player_aabb.y),
+		i32(g.player_aabb.width),
+		i32(g.player_aabb.height),
+		rl.GREEN,
+	)
+
 	rl.EndMode2D()
 
 	rl.BeginMode2D(ui_camera())
@@ -675,6 +725,10 @@ game_init :: proc() {
 		// You can put textures, sounds and music in the `assets` folder. Those
 		// files will be part any release or web build.
 		player_texture       = rl.LoadTexture("assets/round_cat.png"),
+		titulo               = rl.LoadTexture("assets/titulo.png"),
+		atlas                = rl.LoadTexture("assets/atlas.png"),
+		runAnim              = animation_create(.Correr),
+		runAttackAnim        = animation_create(.Correr_Ataque),
 		player_pos           = pos,
 		// reveal internal walls at level start for a short grace period
 		show_internal_walls  = true,
@@ -684,6 +738,7 @@ game_init :: proc() {
 		maze_cols            = cols,
 		collectibles         = make([dynamic]Collectible, 0),
 		player_hp            = 3,
+		player_size          = atlas_animations[g.runAnim.atlas_anim].document_size.xy,
 		inv_timer            = 0.0,
 		current_level        = 1,
 		fade_phase           = 0,
@@ -691,17 +746,23 @@ game_init :: proc() {
 		laberintoActual      = paredes,
 		vEntrada             = vEnt,
 		vSalida              = vSal,
-		titulo               = rl.LoadTexture("assets/titulo.png"),
-		atlas                = rl.LoadTexture("assets/atlas.png"),
 	}
 
 	// inicializar player_aabb ahora que la textura está cargada en g
+	g.player_size = atlas_animations[g.runAnim.atlas_anim].document_size.xy
+
 	g.player_aabb = rl.Rectangle {
-		x      = g.player_pos.x - f32(g.player_texture.width) / 2,
-		y      = g.player_pos.y - f32(g.player_texture.height) / 2,
-		width  = f32(g.player_texture.width),
-		height = f32(g.player_texture.height),
+		x      = g.player_pos.x - g.player_size.x / 2,
+		y      = g.player_pos.y - g.player_size.y / 2,
+		width  = g.player_size.x,
+		height = g.player_size.y,
 	}
+
+	fmt.println("game init")
+	fmt.println(g.player_aabb)
+	fmt.println(atlas_animations[g.runAnim.atlas_anim].document_size)
+	fmt.println(g.player_size)
+	fmt.println("game init")
 
 	game_hot_reloaded(g)
 

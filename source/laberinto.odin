@@ -112,7 +112,7 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 	}
 
 	// Construir slice de paredes a partir del grafo resultante
-	tamCelda := f32(150)
+	tamCelda := f32(128 * 2)
 	paredes := make([dynamic]Pared, 0)
 
 	// elegir vSalida: el vértice del borde más lejano desde vEntrada
