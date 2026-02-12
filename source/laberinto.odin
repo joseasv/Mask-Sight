@@ -1,7 +1,7 @@
 package game
 
 import cq "core:container/queue"
-//import "core:fmt"
+import "core:fmt"
 import "core:math"
 import "core:math/rand"
 import "core:slice"
@@ -359,12 +359,61 @@ dibujarLaberinto :: proc() {
 			draw_color = rl.GREEN
 		}
 		rl.DrawLineEx(p.inicio, p.fin, p.thickness, draw_color)
+
+		if p.tipo != 2 {
+			if p.inicio.y == p.fin.y {
+				// horizontal
+
+				/*rl.DrawTextureRec(
+				g.atlas,
+				atlas_textures[.Pared_Frente].rect,
+				rl.Vector2{p.inicio.x, p.inicio.y - atlas_textures[.Pared_Frente].rect.height},
+				rl.WHITE,
+			)*/
+
+				dest := rl.Rectangle {
+					p.inicio.x,
+					p.inicio.y,
+					abs(p.fin.x - p.inicio.x),
+					atlas_textures[.Pared_Frente].rect.height,
+				}
+
+				fmt.println(dest)
+				rl.DrawTexturePro(
+					g.atlas,
+					atlas_textures[.Pared_Frente].rect,
+					dest,
+					rl.Vector2{0, atlas_textures[.Pared_Frente].rect.height},
+					0,
+					rl.WHITE,
+				)
+			} else {
+				dest := rl.Rectangle {
+					p.inicio.x,
+					p.inicio.y,
+					atlas_textures[.Pared_Vertical].rect.width,
+					abs(p.fin.y - p.inicio.y),
+				}
+
+				rl.DrawTexturePro(
+					g.atlas,
+					atlas_textures[.Pared_Vertical].rect,
+					dest,
+					rl.Vector2{atlas_textures[.Pared_Vertical].rect.width / 2, 0},
+					0,
+					rl.WHITE,
+				)
+
+			}
+		}
+
+
 	}
 
 }
 
 resolverColisionesJugador :: proc() {
-	pr := g.player_aabb
+	pr := g.personaje.aabb
 	// iterar sobre paredes y resolver por el eje de menor penetración (slide)
 	for i in 0 ..< len(g.laberintoActual) {
 		p := g.laberintoActual[i]
@@ -383,8 +432,8 @@ resolverColisionesJugador :: proc() {
 					// push player opposite from wall center and apply stun/shake once
 					wall_cx := wa.x + wa.width / 2
 					wall_cy := wa.y + wa.height / 2
-					dx := g.player_pos.x - wall_cx
-					dy := g.player_pos.y - wall_cy
+					dx := g.personaje.pos.x - wall_cx
+					dy := g.personaje.pos.y - wall_cy
 					len := math.sqrt(dx * dx + dy * dy)
 					nx := f32(0.0)
 					ny := f32(0.0)
@@ -396,14 +445,14 @@ resolverColisionesJugador :: proc() {
 						ny = dy / len
 					}
 					pushDist := f32(40) / f32(4)
-					g.player_pos.x += nx * pushDist
-					g.player_pos.y += ny * pushDist
+					g.personaje.pos.x += nx * pushDist
+					g.personaje.pos.y += ny * pushDist
 					g.stun_timer = f32(2.0)
 					g.shake_timer = f32(1.0)
 					// update player AABB after push
-					g.player_aabb.x = g.player_pos.x - g.player_aabb.width / 2
-					g.player_aabb.y = g.player_pos.y - g.player_aabb.height / 2
-					pr = g.player_aabb
+					g.personaje.aabb.x = g.personaje.pos.x - g.personaje.aabb.width / 2
+					g.personaje.aabb.y = g.personaje.pos.y - g.personaje.aabb.height / 2
+					pr = g.personaje.aabb
 					continue
 				}
 			}
@@ -434,33 +483,33 @@ resolverColisionesJugador :: proc() {
 
 			if overlapW > 0 && overlapH > 0 {
 				// centro de player y wall
-				cx := g.player_pos.x
-				cy := g.player_pos.y
+				cx := g.personaje.pos.x
+				cy := g.personaje.pos.y
 				wall_cx := wa.x + wa.width / 2
 				wall_cy := wa.y + wa.height / 2
 
 				if overlapW < overlapH {
 					// resolver en X por slide
 					if cx < wall_cx {
-						g.player_pos.x -= overlapW
+						g.personaje.pos.x -= overlapW
 					} else {
-						g.player_pos.x += overlapW
+						g.personaje.pos.x += overlapW
 					}
 				} else {
 					// resolver en Y por slide
 					if cy < wall_cy {
-						g.player_pos.y -= overlapH
+						g.personaje.pos.y -= overlapH
 					} else {
-						g.player_pos.y += overlapH
+						g.personaje.pos.y += overlapH
 					}
 				}
 
 				// actualizar AABB del jugador tras mover
-				g.player_aabb.x = g.player_pos.x - g.player_aabb.width / 2
-				g.player_aabb.y = g.player_pos.y - g.player_aabb.height / 2
+				g.personaje.aabb.x = g.personaje.pos.x - g.personaje.aabb.width / 2
+				g.personaje.aabb.y = g.personaje.pos.y - g.personaje.aabb.height / 2
 
 				// actualizar pr para siguientes comprobaciones
-				pr = g.player_aabb
+				pr = g.personaje.aabb
 			}
 		}
 	}

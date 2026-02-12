@@ -29,7 +29,7 @@ package game
 
 import "core:fmt"
 import "core:math"
-import "core:math/linalg"
+
 import "core:math/rand"
 import rl "vendor:raylib"
 
@@ -46,43 +46,38 @@ GameState :: enum {
 }
 
 Game_Memory :: struct {
-	player_pos:           rl.Vector2,
-	player_texture:       rl.Texture,
-	some_number:          int,
-	run:                  bool,
-	laberintoActual:      [dynamic]Pared,
-	pared:                []Pared,
-	vEntrada:             int,
-	vSalida:              int,
-	player_aabb:          rl.Rectangle,
-	show_internal_walls:  bool,
-	internal_walls_timer: f32,
-	player_tint:          rl.Color,
+	some_number:           int,
+	run:                   bool,
+	laberintoActual:       [dynamic]Pared,
+	pared:                 []Pared,
+	vEntrada:              int,
+	vSalida:               int,
+	show_internal_walls:   bool,
+	internal_walls_timer:  f32,
+
 	// maze dimensions used to spawn collectibles
-	maze_rows:            int,
-	maze_cols:            int,
-	collectibles:         [dynamic]Collectible,
+	spriteParedHorizontal: rl.Texture2D,
+	spriteParedVertical:   rl.Texture2D,
+	maze_rows:             int,
+	maze_cols:             int,
+	collectibles:          [dynamic]Collectible,
 	// fade state: 0 = none, 1 = fading out, 2 = fading in
-	fade_phase:           int,
-	fade_timer:           f32,
+	fade_phase:            int,
+	fade_timer:            f32,
 	// screen shake / stun
-	shake_timer:          f32,
-	stun_timer:           f32,
-	enemies:              [dynamic]Enemy,
+	shake_timer:           f32,
+	stun_timer:            f32,
+	enemies:               [dynamic]Enemy,
 	// state system
-	state_requested:      int, // -1 = none, otherwise GameState
-	selected_difficulty:  int,
-	selected_character:   int,
-	reached_exit:         bool,
-	player_hp:            int,
-	player_flip:          bool,
-	player_size:          [2]f32,
-	inv_timer:            f32,
-	current_level:        int,
-	runAnim:              AnimationFromAtlas,
-	runAttackAnim:        AnimationFromAtlas,
-	atlas:                rl.Texture,
-	titulo:               rl.Texture,
+	state_requested:       int, // -1 = none, otherwise GameState
+	selected_difficulty:   int,
+	selected_character:    int,
+	reached_exit:          bool,
+	inv_timer:             f32,
+	current_level:         int,
+	atlas:                 rl.Texture,
+	titulo:                rl.Texture,
+	personaje:             Personaje,
 }
 
 g: ^Game_Memory
@@ -108,14 +103,14 @@ game_camera :: proc() -> rl.Camera2D {
 	h := f32(rl.GetScreenHeight())
 
 	// apply screen shake offset if active
-	target := g.player_pos
+	target := g.personaje.pos
 	if g.shake_timer > 0.0 {
 		// magnitude in pixels, decay with time
 		maxMag := f32(8)
 		mag := maxMag * (g.shake_timer / f32(1.0))
 		rx := f32(rl.GetRandomValue(i32(-mag), i32(mag)))
 		ry := f32(rl.GetRandomValue(i32(-mag), i32(mag)))
-		target = rl.Vector2{g.player_pos.x + rx, g.player_pos.y + ry}
+		target = rl.Vector2{g.personaje.pos.x + rx, g.personaje.pos.y + ry}
 	}
 
 	return {zoom = 1, target = target, offset = {w / 2, h / 2}}
@@ -224,7 +219,7 @@ start_new_maze :: proc(newRows: int, newCols: int) {
 	// start each new maze with the internal walls revealed for 3s
 	g.internal_walls_timer = f32(3.0)
 	g.show_internal_walls = true
-	g.player_tint = rl.YELLOW
+	g.personaje.tint = rl.YELLOW
 	g.laberintoActual = paredes
 	g.maze_rows = newRows
 	g.maze_cols = newCols
@@ -232,23 +227,23 @@ start_new_maze :: proc(newRows: int, newCols: int) {
 	g.vSalida = vSal
 
 	// reset player HP at level start
-	g.player_hp = 3
+	g.personaje.hp = 3
 
 	// colocar jugador en la celda de entrada
 	tamCelda := f32(40)
 	col := vEnt % newCols
 	row := vEnt / newCols
-	g.player_pos = rl.Vector2 {
+	g.personaje.pos = rl.Vector2 {
 		f32(col) * tamCelda + tamCelda / 2,
 		f32(row) * tamCelda + tamCelda / 2,
 	}
 
-	g.player_aabb.width = g.player_size.x
-	g.player_aabb.height = g.player_size.y
-	g.player_aabb.x = g.player_pos.x - g.player_aabb.width / 2
-	g.player_aabb.y = g.player_pos.y - g.player_aabb.height / 2
+	g.personaje.aabb.width = g.personaje.size.x
+	g.personaje.aabb.height = g.personaje.size.y
+	g.personaje.aabb.x = g.personaje.pos.x - g.personaje.aabb.width / 2
+	g.personaje.aabb.y = g.personaje.pos.y - g.personaje.aabb.height / 2
 
-	fmt.println("start_new_maze player aabb", g.player_aabb)
+	fmt.println("start_new_maze player aabb", g.personaje.aabb)
 	// generar nuevos collectibles
 	generate_collectibles(newRows, newCols)
 	// generar nuevos enemigos
@@ -260,47 +255,10 @@ ui_camera :: proc() -> rl.Camera2D {
 }
 
 update :: proc() {
-	input: rl.Vector2
+
 	dt := rl.GetFrameTime()
 
-	if g.internal_walls_timer > 0.0 {
-		animation_update(&g.runAttackAnim, dt)
-	} else {
-		animation_update(&g.runAnim, dt)
-	}
-
-
-	// movement disabled while fading
-	vel: f32 = 350
-
-	if g.fade_phase == 0 && g.stun_timer <= 0.0 {
-		if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) {
-			input.y -= 1
-		}
-		if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.S) {
-			input.y += 1
-		}
-		if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.A) {
-			g.player_flip = true
-			input.x -= 1
-		}
-		if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.D) {
-			g.player_flip = false
-			input.x += 1
-		}
-		input = linalg.normalize0(input)
-		g.player_pos += input * dt * vel
-	}
-
-	g.some_number += 1
-
-	// actualizar AABB del jugador (rect centrado en player_pos)
-	g.player_aabb = rl.Rectangle {
-		x      = g.player_pos.x - g.player_size.x / 2,
-		y      = g.player_pos.y - g.player_size.y / 2,
-		width  = g.player_size.x,
-		height = g.player_size.y,
-	}
+	updatePersonaje(&g.personaje, dt)
 
 	// move enemies when internal walls are hidden and not fading
 	if !g.show_internal_walls && g.fade_phase == 0 {
@@ -308,8 +266,8 @@ update :: proc() {
 			e := &g.enemies[i]
 			if !e.alive {continue}
 			// move towards player
-			dx := g.player_pos.x - e.pos.x
-			dy := g.player_pos.y - e.pos.y
+			dx := g.personaje.pos.x - e.pos.x
+			dy := g.personaje.pos.y - e.pos.y
 			dist := math.sqrt(dx * dx + dy * dy)
 			if dist > 0.1 {
 				nx := dx / dist
@@ -327,7 +285,7 @@ update :: proc() {
 		for i in 0 ..< len(g.enemies) {
 			e := &g.enemies[i]
 			if !e.alive {continue}
-			if rl.CheckCollisionRecs(g.player_aabb, e.aabb) {
+			if rl.CheckCollisionRecs(g.personaje.aabb, e.aabb) {
 				// only apply damage once per contact using flash_timer as cooldown
 				if e.flash_timer <= 0.0 {
 					e.hp -= 1
@@ -346,7 +304,7 @@ update :: proc() {
 	if g.fade_phase == 0 {
 		for p in g.laberintoActual {
 			if p.tipo == 2 {
-				if rl.CheckCollisionRecs(g.player_aabb, p.aabb) {
+				if rl.CheckCollisionRecs(g.personaje.aabb, p.aabb) {
 					g.fade_phase = 1 // start fade out
 					g.fade_timer = 0.0
 					g.reached_exit = true
@@ -364,11 +322,11 @@ update :: proc() {
 		for i in 0 ..< len(g.collectibles) {
 			c := &g.collectibles[i]
 			if !c.collected {
-				if rl.CheckCollisionRecs(g.player_aabb, c.aabb) {
+				if rl.CheckCollisionRecs(g.personaje.aabb, c.aabb) {
 					c.collected = true
 					g.internal_walls_timer += 3.0
 					g.show_internal_walls = true
-					g.player_tint = rl.YELLOW
+					g.personaje.tint = rl.YELLOW
 				}
 			}
 		}
@@ -388,9 +346,9 @@ update :: proc() {
 			progress := 1.0 - (g.internal_walls_timer / 3.0)
 			if progress < 0.0 {progress = 0.0}
 			if progress > 1.0 {progress = 1.0}
-			g.player_tint = color_lerp(rl.YELLOW, rl.WHITE, progress)
+			g.personaje.tint = color_lerp(rl.YELLOW, rl.WHITE, progress)
 		} else {
-			g.player_tint = rl.WHITE
+			g.personaje.tint = rl.WHITE
 		}
 
 		// update shake / stun timers
@@ -447,8 +405,8 @@ update :: proc() {
 						}
 						px := f32(cc) * tamCelda + tamCelda / 2
 						py := f32(rr) * tamCelda + tamCelda / 2
-						dx := px - g.player_pos.x
-						dy := py - g.player_pos.y
+						dx := px - g.personaje.pos.x
+						dy := py - g.personaje.pos.y
 						if dx * dx + dy * dy >= (tamCelda * tamCelda * 9) {
 							// accept
 							e.pos = rl.Vector2{px, py}
@@ -464,8 +422,8 @@ update :: proc() {
 					}
 					if !placed {
 						// fallback: place at opposite of player
-						px := g.player_pos.x + tamCelda * 4
-						py := g.player_pos.y + tamCelda * 4
+						px := g.personaje.pos.x + tamCelda * 4
+						py := g.personaje.pos.y + tamCelda * 4
 						e.pos = rl.Vector2{px, py}
 						size := f32(12)
 						e.aabb = rl.Rectangle{px - size / 2, py - size / 2, size, size}
@@ -550,40 +508,7 @@ draw :: proc() {
 		}
 	}
 
-	if g.internal_walls_timer > 0.0 {
-		if visible {
-			animation_atlas_draw(
-				g.runAttackAnim,
-				rl.Vector2 {
-					g.player_pos.x - g.player_size.x / 2,
-					g.player_pos.y - g.player_size.y / 2,
-				},
-				g.player_flip,
-			)
-		}
-
-
-	} else {
-		animation_atlas_draw(
-			g.runAnim,
-			rl.Vector2{g.player_pos.x - g.player_size.x / 2, g.player_pos.y - g.player_size.y / 2},
-			g.player_flip,
-		)
-	}
-
-
-	/*if visible {
-		rl.DrawTextureEx(
-			g.player_texture,
-			rl.Vector2 {
-				g.player_pos.x - f32(g.player_texture.width) / 2,
-				g.player_pos.y - f32(g.player_texture.height) / 2,
-			},
-			0,
-			1,
-			g.player_tint,
-		)
-	}*/
+	drawPersonaje(g.personaje, visible)
 
 
 	// dibujar collectibles
@@ -634,10 +559,10 @@ draw :: proc() {
 
 
 	rl.DrawRectangleLines(
-		i32(g.player_aabb.x),
-		i32(g.player_aabb.y),
-		i32(g.player_aabb.width),
-		i32(g.player_aabb.height),
+		i32(g.personaje.aabb.x),
+		i32(g.personaje.aabb.y),
+		i32(g.personaje.aabb.width),
+		i32(g.personaje.aabb.height),
 		rl.GREEN,
 	)
 
@@ -654,7 +579,7 @@ draw :: proc() {
 	boxStartX := i32(ui_w) - 80
 	for k in 0 ..< 3 {
 		bx := boxStartX + i32(k) * (boxSize + gap)
-		if k < g.player_hp {
+		if k < g.personaje.hp {
 			rl.DrawRectangle(bx, 6, boxSize, boxSize, rl.RED)
 		} else {
 			rl.DrawRectangle(bx, 6, boxSize, boxSize, rl.DARKGRAY)
@@ -713,7 +638,7 @@ game_init :: proc() {
 	paredes, vEnt, vSal := crearLaberinto(rows, cols, 1)
 
 	// calcular posición del jugador: centro de la celda de entrada
-	tamCelda := f32(40)
+	tamCelda := f32(128 * 2)
 	col := vEnt % cols
 	row := vEnt / cols
 	pos := rl.Vector2{f32(col) * tamCelda + tamCelda / 2, f32(row) * tamCelda + tamCelda / 2}
@@ -724,21 +649,14 @@ game_init :: proc() {
 
 		// You can put textures, sounds and music in the `assets` folder. Those
 		// files will be part any release or web build.
-		player_texture       = rl.LoadTexture("assets/round_cat.png"),
 		titulo               = rl.LoadTexture("assets/titulo.png"),
 		atlas                = rl.LoadTexture("assets/atlas.png"),
-		runAnim              = animation_create(.Correr),
-		runAttackAnim        = animation_create(.Correr_Ataque),
-		player_pos           = pos,
 		// reveal internal walls at level start for a short grace period
 		show_internal_walls  = true,
 		internal_walls_timer = f32(3.0),
-		player_tint          = rl.YELLOW,
 		maze_rows            = rows,
 		maze_cols            = cols,
 		collectibles         = make([dynamic]Collectible, 0),
-		player_hp            = 3,
-		player_size          = atlas_animations[g.runAnim.atlas_anim].document_size.xy,
 		inv_timer            = 0.0,
 		current_level        = 1,
 		fade_phase           = 0,
@@ -748,20 +666,30 @@ game_init :: proc() {
 		vSalida              = vSal,
 	}
 
-	// inicializar player_aabb ahora que la textura está cargada en g
-	g.player_size = atlas_animations[g.runAnim.atlas_anim].document_size.xy
-
-	g.player_aabb = rl.Rectangle {
-		x      = g.player_pos.x - g.player_size.x / 2,
-		y      = g.player_pos.y - g.player_size.y / 2,
-		width  = g.player_size.x,
-		height = g.player_size.y,
+	pNuevo := Personaje {
+		pos           = pos,
+		hp            = 3,
+		runAnim       = animation_create(.Correr),
+		runAttackAnim = animation_create(.Correr_Ataque),
+		idleAnim      = animation_create(.Idle),
+		victoryAnim   = animation_create(.Victory),
+		tint          = rl.YELLOW,
 	}
 
+	pNuevo.size = atlas_animations[pNuevo.runAnim.atlas_anim].document_size.xy // disponible despues de cargar las animaciones
+	pNuevo.aabb = rl.Rectangle {
+		x      = pNuevo.pos.x - pNuevo.size.x / 2,
+		y      = pNuevo.pos.y - pNuevo.size.y / 2,
+		width  = pNuevo.size.x,
+		height = pNuevo.size.y,
+	}
+
+	g.personaje = pNuevo
+
 	fmt.println("game init")
-	fmt.println(g.player_aabb)
-	fmt.println(atlas_animations[g.runAnim.atlas_anim].document_size)
-	fmt.println(g.player_size)
+	fmt.println(g.personaje.aabb)
+	fmt.println(atlas_animations[pNuevo.runAnim.atlas_anim].document_size)
+	fmt.println(g.personaje.size)
 	fmt.println("game init")
 
 	game_hot_reloaded(g)

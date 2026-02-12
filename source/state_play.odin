@@ -27,11 +27,11 @@ state_play_update :: proc() {
 		for i in 0 ..< len(g.enemies) {
 			e := &g.enemies[i]
 			if e.alive {
-				if rl.CheckCollisionRecs(g.player_aabb, e.aabb) {
+				if rl.CheckCollisionRecs(g.personaje.aabb, e.aabb) {
 					// only apply damage if not currently invincible
 					if g.inv_timer <= 0.0 {
 						// player takes damage
-						g.player_hp -= 1
+						g.personaje.hp -= 1
 						// set invincibility (3s)
 						g.inv_timer = f32(3.0)
 						// reset the enemy similar to when it's killed: set hp to 0 and dead_timer so it fades and will respawn
@@ -39,7 +39,7 @@ state_play_update :: proc() {
 						e.dead_timer = f32(0.5)
 						e.flash_timer = 0.0
 
-						if g.player_hp <= 0 {
+						if g.personaje.hp <= 0 {
 							g.state_requested = int(GameState.Title)
 							return
 						}

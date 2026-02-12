@@ -17,10 +17,10 @@ state_final_draw :: proc() {
 	rl.ClearBackground(rl.BLACK)
 
 	// show a full-screen reveal image if available; fallback to player texture
-	w := rl.GetScreenWidth()
-	h := rl.GetScreenHeight()
+	/*w := rl.GetScreenWidth()
+	h := rl.GetScreenHeight()*/
 	// draw texture centered and scaled to cover
-	if g.player_texture.id != 0 {
+	/*if g.player_texture.id != 0 {
 		rl.DrawTexturePro(
 			g.player_texture,
 			rl.Rectangle{0, 0, f32(g.player_texture.width), f32(g.player_texture.height)},
@@ -29,7 +29,7 @@ state_final_draw :: proc() {
 			0,
 			rl.WHITE,
 		)
-	}
+	}*/
 
 	rl.EndDrawing()
 }
