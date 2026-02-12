@@ -508,6 +508,7 @@ draw :: proc() {
 		}
 	}
 
+	dibujarLaberinto()
 	drawPersonaje(g.personaje, visible)
 
 
@@ -555,7 +556,6 @@ draw :: proc() {
 			)
 		}
 	}
-	dibujarLaberinto()
 
 
 	rl.DrawRectangleLines(

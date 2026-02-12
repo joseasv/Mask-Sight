@@ -345,6 +345,28 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 }
 
 dibujarLaberinto :: proc() {
+
+	tamCelda := f32(128 * 2)
+	filas := g.maze_rows
+	columnas := g.maze_cols
+
+	for i in 0 ..< filas * 4 {
+		for j in 0 ..< columnas * 4 {
+			x := f32(j) * tamCelda / 4
+			y := f32(i) * tamCelda / 4
+
+			rl.DrawTexturePro(
+				g.atlas,
+				atlas_textures[.Piso].rect,
+				rl.Rectangle{x, y, tamCelda / 4, tamCelda / 4},
+				rl.Vector2{0, 0},
+				0,
+				rl.WHITE,
+			)
+
+		}
+	}
+
 	paredes := g.laberintoActual
 
 	for p in paredes {
@@ -409,6 +431,7 @@ dibujarLaberinto :: proc() {
 
 
 	}
+
 
 }
 
