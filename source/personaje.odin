@@ -95,4 +95,12 @@ drawPersonaje :: proc(p: Personaje, visible: bool) {
 		p.flip,
 	)
 
+	rl.DrawRectangleLines(
+		i32(g.personaje.aabb.x),
+		i32(g.personaje.aabb.y),
+		i32(g.personaje.aabb.width),
+		i32(g.personaje.aabb.height),
+		rl.GREEN,
+	)
+
 }

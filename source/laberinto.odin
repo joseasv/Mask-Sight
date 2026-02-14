@@ -1,7 +1,7 @@
 package game
 
 import cq "core:container/queue"
-import "core:fmt"
+//import "core:fmt"
 import "core:math"
 import "core:math/rand"
 import "core:slice"
@@ -386,13 +386,6 @@ dibujarLaberinto :: proc() {
 			if p.inicio.y == p.fin.y {
 				// horizontal
 
-				/*rl.DrawTextureRec(
-				g.atlas,
-				atlas_textures[.Pared_Frente].rect,
-				rl.Vector2{p.inicio.x, p.inicio.y - atlas_textures[.Pared_Frente].rect.height},
-				rl.WHITE,
-			)*/
-
 				dest := rl.Rectangle {
 					p.inicio.x,
 					p.inicio.y,
@@ -400,7 +393,7 @@ dibujarLaberinto :: proc() {
 					atlas_textures[.Pared_Frente].rect.height,
 				}
 
-				fmt.println(dest)
+
 				rl.DrawTexturePro(
 					g.atlas,
 					atlas_textures[.Pared_Frente].rect,
@@ -447,9 +440,8 @@ resolverColisionesJugador :: proc() {
 			// if this is an internal wall and currently hidden, trigger screen shake + stun and push player
 			if p.tipo == 1 && !g.show_internal_walls {
 				// if wall already revealed, treat as visible (no stun)
-				if p.revelada {
-					// fallthrough to normal resolution below
-				} else {
+				if !p.revelada {
+
 					// reveal this wall permanently for this level
 					g.laberintoActual[i].revelada = true
 					// push player opposite from wall center and apply stun/shake once
@@ -476,7 +468,7 @@ resolverColisionesJugador :: proc() {
 					g.personaje.aabb.x = g.personaje.pos.x - g.personaje.aabb.width / 2
 					g.personaje.aabb.y = g.personaje.pos.y - g.personaje.aabb.height / 2
 					pr = g.personaje.aabb
-					continue
+					break
 				}
 			}
 			// calcular overlap

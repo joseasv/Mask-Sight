@@ -1,6 +1,13 @@
 package game
 
 // state manager doesn't need raylib directly
+GameState :: enum {
+	Title,
+	Select,
+	Story,
+	Play,
+	Final,
+}
 
 current_state: GameState = GameState.Title
 
@@ -50,10 +57,6 @@ state_machine_update :: proc() {
 		state_final_update()
 	}
 
-	// handle request generated during update
-	if g.state_requested != -1 {
-		transition_to(GameState(g.state_requested))
-	}
 }
 
 state_machine_draw :: proc() {
