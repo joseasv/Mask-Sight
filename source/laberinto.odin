@@ -1,7 +1,7 @@
 package game
 
 import cq "core:container/queue"
-//import "core:fmt"
+import "core:fmt"
 import "core:math"
 import "core:math/rand"
 import "core:slice"
@@ -21,8 +21,40 @@ Laberinto :: struct {
 	ady:          [][dynamic]int,
 	predecesores: []int,
 	distancias:   []int,
+	visitados:    []bool,
 	filas:        int,
 	columnas:     int,
+}
+
+vecinosSinAristas :: proc(l: Laberinto, v: int) -> [dynamic]int {
+	vecinos := make([dynamic]int, context.temp_allocator)
+
+	if v % l.columnas != 0 {
+		if !l.visitados[v - 1] {
+			append(&vecinos, v - 1)
+		}
+	}
+
+	if v % l.columnas != l.columnas - 1 {
+		if !l.visitados[v + 1] {
+			append(&vecinos, v + 1)
+		}
+
+	}
+
+	if v / l.columnas != 0 {
+		if !l.visitados[v - l.columnas] {
+			append(&vecinos, v - l.columnas)
+		}
+	}
+
+	if v / l.columnas != l.filas - 1 {
+		if !l.visitados[v + l.columnas] {
+			append(&vecinos, v + l.columnas)
+		}
+	}
+
+	return vecinos
 }
 
 crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]Pared, int, int) {
@@ -30,25 +62,10 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 		filas        = filas,
 		columnas     = columnas,
 		ady          = make([][dynamic]int, filas * columnas),
+		visitados    = make([]bool, filas * columnas),
 		predecesores = make([]int, filas * columnas),
 		distancias   = make([]int, filas * columnas),
 	}
-
-	for filaActual in 0 ..< filas {
-		for columnaActual in 0 ..< columnas {
-			vertice := filaActual * columnas + columnaActual
-			if columnaActual < columnas - 1 {
-				append(&laberinto.ady[vertice], vertice + 1)
-				append(&laberinto.ady[vertice + 1], vertice)
-			}
-			if filaActual < filas - 1 {
-				append(&laberinto.ady[vertice], vertice + columnas)
-				append(&laberinto.ady[vertice + columnas], vertice)
-			}
-		}
-	}
-
-	visitados := make([]bool, filas * columnas)
 
 	// seleccionar un vértice de entrada aleatorio entre los vértices del borde
 	border := make([dynamic]int, 0)
@@ -61,11 +78,12 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 	}
 	rand.shuffle(border[:])
 	vEntrada := border[0]
+	//vEntrada := 0
 
 	// inicializar distancias a -1
 	slice.fill(laberinto.distancias, -1)
 
-	visitados[vEntrada] = true
+	laberinto.visitados[vEntrada] = true
 	laberinto.distancias[vEntrada] = 0
 
 	if dificultad >= 0 {
@@ -77,31 +95,19 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 		for cq.len(cola) > 0 {
 			v := cq.pop_front(&cola)
 
-			vecinosDesorden := laberinto.ady[v][:]
-			rand.shuffle(vecinosDesorden)
+			vecinosDesorden := vecinosSinAristas(laberinto, v)
+			rand.shuffle(vecinosDesorden[:])
+
+			fmt.println("visitando", v, "vecinos:", vecinosDesorden)
 
 			for w in vecinosDesorden {
-				if !visitados[w] {
-					visitados[w] = true
+				if !laberinto.visitados[w] {
+					laberinto.visitados[w] = true
 					laberinto.predecesores[w] = v
 					laberinto.distancias[w] = laberinto.distancias[v] + 1
+					append(&laberinto.ady[v], w)
+					append(&laberinto.ady[w], v)
 					cq.push(&cola, w)
-				} else {
-					if laberinto.predecesores[v] != w {
-						// quitar la conexion en ambas direcciones entre v y w
-						for vertice, i in laberinto.ady[w] {
-							if vertice == v {
-								unordered_remove(&laberinto.ady[w], i)
-								break
-							}
-						}
-						for vertice2, j in laberinto.ady[v] {
-							if vertice2 == w {
-								unordered_remove(&laberinto.ady[v], j)
-								break
-							}
-						}
-					}
 				}
 			}
 		}
