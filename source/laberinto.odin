@@ -26,6 +26,60 @@ Laberinto :: struct {
 	columnas:     int,
 }
 
+// Procedimiento auxiliar para crear y configurar la pared
+crear_pared :: proc(
+	paredes: ^[dynamic]Pared,
+	inicio, fin: rl.Vector2,
+	es_borde: bool,
+	es_salida: bool, // <-- Esto determina si es tipo 2
+) {
+	grosor := f32(8)
+
+	// Calcular AABB (Caja de colisión)
+	min_x := min(inicio.x, fin.x)
+	min_y := min(inicio.y, fin.y)
+	width := abs(fin.x - inicio.x)
+	height := abs(fin.y - inicio.y)
+
+	// Ajuste para que las líneas tengan volumen
+	if width < grosor {
+		min_x -= grosor / 2
+		width = grosor
+	}
+	if height < grosor {
+		min_y -= grosor / 2
+		height = grosor
+	}
+
+	// Lógica de TIPO y COLOR
+	tipo_final := 0
+	color_final := rl.YELLOW
+
+	if es_salida {
+		tipo_final = 2
+		color_final = rl.GREEN // Salida verde
+	} else if !es_borde {
+		tipo_final = 1 // Pared interna
+		color_final = rl.YELLOW
+	} else {
+		tipo_final = 0 // Borde normal
+		color_final = rl.YELLOW
+	}
+
+	append(
+		paredes,
+		Pared {
+			inicio    = inicio,
+			fin       = fin,
+			tipo      = tipo_final,
+			color     = color_final,
+			thickness = grosor,
+			aabb      = rl.Rectangle{min_x, min_y, width, height},
+			revelada  = false, // Asumo que empieza oculta
+		},
+	)
+}
+
 vecinosSinAristas :: proc(l: Laberinto, v: int) -> [dynamic]int {
 	vecinos := make([dynamic]int, context.temp_allocator)
 
@@ -57,7 +111,30 @@ vecinosSinAristas :: proc(l: Laberinto, v: int) -> [dynamic]int {
 	return vecinos
 }
 
+// Procedimiento para decidir qué pared romper en un borde
+obtener_pared_borde :: proc(v: int, filas: int, columnas: int) -> int {
+	row := v / columnas
+	col := v % columnas
+
+	opciones := make([dynamic]int, context.temp_allocator)
+	// No hace falta defer delete si usas temp_allocator dentro del frame
+
+	// 0: Derecha, 1: Abajo, 2: Arriba, 3: Izquierda
+	if col == 0 {append(&opciones, 3)} 	// Izquierda
+	if col == columnas - 1 {append(&opciones, 0)} 	// Derecha
+	if row == 0 {append(&opciones, 2)} 	// Arriba
+	if row == filas - 1 {append(&opciones, 1)} 	// Abajo
+
+	if len(opciones) > 0 {
+		// Devuelve una opción aleatoria válida
+		return rand.choice(opciones[:])
+	}
+	return -1 // No es un borde (error)
+}
+
 crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]Pared, int, int) {
+	fmt.println("creando laberinto de", filas, "x", columnas, "con dificultad", dificultad)
+
 	laberinto := Laberinto {
 		filas        = filas,
 		columnas     = columnas,
@@ -68,7 +145,7 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 	}
 
 	// seleccionar un vértice de entrada aleatorio entre los vértices del borde
-	border := make([dynamic]int, 0)
+	border := make([dynamic]int, context.temp_allocator)
 	for r in 0 ..< filas {
 		for c in 0 ..< columnas {
 			if r == 0 || r == filas - 1 || c == 0 || c == columnas - 1 {
@@ -78,6 +155,8 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 	}
 	rand.shuffle(border[:])
 	vEntrada := border[0]
+
+
 	//vEntrada := 0
 
 	// inicializar distancias a -1
@@ -86,7 +165,9 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 	laberinto.visitados[vEntrada] = true
 	laberinto.distancias[vEntrada] = 0
 
-	if dificultad >= 0 {
+
+	if false {
+		//if dificultad >= 2 {
 		// recorrido en anchura (BFS)
 		cola: cq.Queue(int)
 		cq.init(&cola)
@@ -113,7 +194,56 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 		}
 
 	} else {
-		// recorrido en profundidad (DFS iterativo)
+		// RECORRIDO EN PROFUNDIDAD (DFS Iterativo / Recursive Backtracker)
+
+		stack := make([dynamic]int, context.temp_allocator)
+		// No olvides limpiar si no usas el temp_allocator globalmente,
+		// pero para un frame de generación está bien.
+
+		append(&stack, vEntrada)
+
+		for len(stack) > 0 {
+			// 1. PEEK: Miramos el nodo actual (el tope) SIN sacarlo todavía.
+			//    Necesitamos mantenerlo en la pila por si tenemos que retroceder (backtrack).
+			v := stack[len(stack) - 1]
+
+			// 2. Obtenemos vecinos geométricos (arriba, abajo, izq, der)
+			posibles_vecinos := vecinosSinAristas(laberinto, v)
+
+			// 3. Filtrar: Buscamos vecinos que NO hayan sido visitados aún
+			vecinos_validos := make([dynamic]int, context.temp_allocator)
+			for w in posibles_vecinos {
+				if !laberinto.visitados[w] {
+					append(&vecinos_validos, w)
+				}
+			}
+
+			if len(vecinos_validos) > 0 {
+				// --- AVANZAR (Digging) ---
+
+				// Elegimos UNO solo al azar (esto da la aleatoriedad)
+				w := rand.choice(vecinos_validos[:])
+
+				// Marcamos y conectamos
+				laberinto.visitados[w] = true
+				laberinto.predecesores[w] = v
+				laberinto.distancias[w] = laberinto.distancias[v] + 1
+
+				// Creamos la conexión (tiramos la pared)
+				append(&laberinto.ady[v], w)
+				append(&laberinto.ady[w], v)
+
+				// Empujamos el NUEVO nodo al stack para continuar desde ahí en la siguiente vuelta
+				append(&stack, w)
+
+			} else {
+				// --- RETROCEDER (Backtracking) ---
+
+				// Si no hay vecinos válidos, es un callejón sin salida.
+				// Ahora sí sacamos 'v' de la pila para volver al nodo anterior (predecesor)
+				pop(&stack)
+			}
+		}
 
 	}
 
@@ -122,226 +252,99 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 	paredes := make([dynamic]Pared, 0)
 
 	// elegir vSalida: el vértice del borde más lejano desde vEntrada
+
+
+	// elegir una pared exterior aleatoria para la entrada y la salida
+	// Calcular Pared de Entrada
+	entradaWall := obtener_pared_borde(vEntrada, filas, columnas)
+
 	maxDist := -1
-	candidatos := make([dynamic]int, 0)
-	for _, v in border {
+	vSalida := -1
+	for v in border {
 		d := laberinto.distancias[v]
 		if d > maxDist {
 			maxDist = d
-			candidatos = make([dynamic]int, 0)
-			append(&candidatos, v)
-		} else if d == maxDist {
-			append(&candidatos, v)
+			vSalida = v
 		}
 	}
-	rand.shuffle(candidatos[:])
-	vSalida := candidatos[0]
 
-	// elegir una pared exterior aleatoria para la entrada y la salida
-	entradaWall := -1
-	salidaWall := -1
-	{
-		row := vEntrada / columnas
-		col := vEntrada % columnas
-		opciones := make([dynamic]int, 0)
-		if col == 0 {
-			append(&opciones, 3) // izquierda
-		}
-		if col == columnas - 1 {
-			append(&opciones, 0) // derecha
-		}
-		if row == 0 {
-			append(&opciones, 2) // arriba
-		}
-		if row == filas - 1 {
-			append(&opciones, 1) // abajo
-		}
-		if len(opciones) > 0 {
-			rand.shuffle(opciones[:])
-			entradaWall = opciones[0]
+	for v in border {
+		// Ignorar la entrada para que no ponga la salida en el mismo sitio
+		if v == vEntrada {continue}
+
+		d := laberinto.distancias[v]
+
+		// Solo consideramos nodos alcanzables (distancia > -1)
+		if d > maxDist {
+			maxDist = d
+			vSalida = v
 		}
 	}
-	{
-		row := vSalida / columnas
-		col := vSalida % columnas
-		opciones := make([dynamic]int, 0)
-		if col == 0 {
-			append(&opciones, 3)
-		}
-		if col == columnas - 1 {
-			append(&opciones, 0)
-		}
-		if row == 0 {
-			append(&opciones, 2)
-		}
-		if row == filas - 1 {
-			append(&opciones, 1)
-		}
-		if len(opciones) > 0 {
-			rand.shuffle(opciones[:])
-			salidaWall = opciones[0]
-		}
+
+	// Seguridad: Si por alguna razón vSalida sigue siendo -1 (laberinto roto),
+	// forzamos que sea el último del borde diferente a la entrada.
+	if vSalida == -1 {
+		vSalida = border[len(border) - 1]
+		if vSalida == vEntrada {vSalida = border[0]}
 	}
+
+	// Calcular Pared de Salida usando la nueva función
+	salidaWall := obtener_pared_borde(vSalida, filas, columnas)
+
+	// Debug para ver qué está pasando
+	fmt.printf(
+		"Entrada: %d (Pared %d) | Salida: %d (Pared %d)\n",
+		vEntrada,
+		entradaWall,
+		vSalida,
+		salidaWall,
+	)
 
 	for filaActual in 0 ..< filas {
 		for columnaActual in 0 ..< columnas {
 			vertice := filaActual * columnas + columnaActual
+
 			x := f32(columnaActual) * tamCelda
 			y := f32(filaActual) * tamCelda
 
-			// pared derecha (vertical) — evitar duplicados usando solo la pared derecha
+			// 1. PARED DERECHA
 			if columnaActual == columnas - 1 ||
 			   !slice.contains(laberinto.ady[vertice][:], vertice + 1) {
-				inicio := rl.Vector2{x + tamCelda, y}
-				fin := rl.Vector2{x + tamCelda, y + tamCelda}
-				// entrada stays yellow; salida marked by tipo (2) but color kept yellow here
-				//color := rl.YELLOW
-				thickness := f32(8)
-				// compute AABB for the wall (vertical)
-				miny := inicio.y
-				h := fin.y - inicio.y
-				if inicio.y > fin.y {
-					miny = fin.y
-					h = inicio.y - fin.y
-				}
-				aabb := rl.Rectangle{inicio.x - thickness / 2, miny, thickness, h}
-				// border check: right wall is border when columnaActual == columnas - 1
-				is_border := columnaActual == columnas - 1
-				tipo_val := 0
-				if vertice == vSalida && salidaWall == 0 {
-					tipo_val = 2
-				} else if is_border {
-					tipo_val = 0
-				} else {
-					tipo_val = 1
-				}
-				append(
+
+				es_salida := (vertice == vSalida && salidaWall == 0)
+				crear_pared(
 					&paredes,
-					Pared {
-						inicio = inicio,
-						fin = fin,
-						tipo = tipo_val,
-						color = rl.YELLOW,
-						thickness = thickness,
-						aabb = aabb,
-						revelada = false,
-					},
+					{x + tamCelda, y},
+					{x + tamCelda, y + tamCelda},
+					columnaActual == columnas - 1,
+					es_salida,
 				)
 			}
 
-			// pared inferior (horizontal) — evitar duplicados usando solo la pared inferior
+			// 2. PARED INFERIOR
 			if filaActual == filas - 1 ||
 			   !slice.contains(laberinto.ady[vertice][:], vertice + columnas) {
-				inicio := rl.Vector2{x, y + tamCelda}
-				fin := rl.Vector2{x + tamCelda, y + tamCelda}
-				// entrada always yellow; salida marked by tipo (2)
-				//color := rl.YELLOW
-				thickness := f32(8)
-				minx := inicio.x
-				w := fin.x - inicio.x
-				if inicio.x > fin.x {
-					minx = fin.x
-					w = inicio.x - fin.x
-				}
-				aabb := rl.Rectangle{minx, inicio.y - thickness / 2, w, thickness}
-				// bottom wall is border when filaActual == filas - 1
-				is_border := filaActual == filas - 1
-				tipo_val := 0
-				if vertice == vSalida && salidaWall == 1 {
-					tipo_val = 2
-				} else if is_border {
-					tipo_val = 0
-				} else {
-					tipo_val = 1
-				}
-				append(
+
+				es_salida := (vertice == vSalida && salidaWall == 1)
+				crear_pared(
 					&paredes,
-					Pared {
-						inicio = inicio,
-						fin = fin,
-						tipo = tipo_val,
-						color = rl.YELLOW,
-						thickness = thickness,
-						aabb = aabb,
-						revelada = false,
-					},
+					{x, y + tamCelda},
+					{x + tamCelda, y + tamCelda},
+					filaActual == filas - 1,
+					es_salida,
 				)
 			}
 
-			// pared superior (solo en la primera fila)
+			// 3. PARED SUPERIOR (Solo fila 0)
 			if filaActual == 0 {
-				inicio := rl.Vector2{x, y}
-				fin := rl.Vector2{x + tamCelda, y}
-				// entrada always yellow; salida marked by tipo (2)
-				//color := rl.YELLOW
-				thickness := f32(8)
-				minx := inicio.x
-				w := fin.x - inicio.x
-				if inicio.x > fin.x {
-					minx = fin.x
-					w = inicio.x - fin.x
-				}
-				aabb := rl.Rectangle{minx, inicio.y - thickness / 2, w, thickness}
-				// top wall is border when filaActual == 0
-				is_border := filaActual == 0
-				tipo_val := 0
-				if vertice == vSalida && salidaWall == 2 {
-					tipo_val = 2
-				} else if is_border {
-					tipo_val = 0
-				} else {
-					tipo_val = 1
-				}
-				append(
-					&paredes,
-					Pared {
-						inicio = inicio,
-						fin = fin,
-						tipo = tipo_val,
-						color = rl.YELLOW,
-						thickness = thickness,
-						aabb = aabb,
-						revelada = false,
-					},
-				)
+				es_salida := (vertice == vSalida && salidaWall == 2)
+				crear_pared(&paredes, {x, y}, {x + tamCelda, y}, true, es_salida)
 			}
 
-			// pared izquierda (solo en la primera columna)
+			// 4. PARED IZQUIERDA (Solo columna 0)
 			if columnaActual == 0 {
-				inicio := rl.Vector2{x, y}
-				fin := rl.Vector2{x, y + tamCelda}
-				// entrada always yellow; salida marked by tipo (2)
-				//color := rl.YELLOW
-				thickness := f32(8)
-				miny := inicio.y
-				h := fin.y - inicio.y
-				if inicio.y > fin.y {
-					miny = fin.y
-					h = inicio.y - fin.y
-				}
-				aabb := rl.Rectangle{inicio.x - thickness / 2, miny, thickness, h}
-				// left wall is border when columnaActual == 0
-				is_border := columnaActual == 0
-				tipo_val := 0
-				if vertice == vSalida && salidaWall == 3 {
-					tipo_val = 2
-				} else if is_border {
-					tipo_val = 0
-				} else {
-					tipo_val = 1
-				}
-				append(
-					&paredes,
-					Pared {
-						inicio = inicio,
-						fin = fin,
-						tipo = tipo_val,
-						color = rl.YELLOW,
-						thickness = thickness,
-						aabb = aabb,
-						revelada = false,
-					},
-				)
+				es_salida := (vertice == vSalida && salidaWall == 3)
+				crear_pared(&paredes, {x, y}, {x, y + tamCelda}, true, es_salida)
 			}
 		}
 	}
@@ -388,7 +391,7 @@ dibujarLaberinto :: proc() {
 		}
 		rl.DrawLineEx(p.inicio, p.fin, p.thickness, draw_color)
 
-		if p.tipo != 2 {
+		/*if p.tipo != 2 {
 			if p.inicio.y == p.fin.y {
 				// horizontal
 
@@ -426,7 +429,7 @@ dibujarLaberinto :: proc() {
 				)
 
 			}
-		}
+		}*/
 
 
 	}

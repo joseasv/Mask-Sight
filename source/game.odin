@@ -215,11 +215,6 @@ game_init :: proc() {
 
 	g.personaje = pNuevo
 
-	fmt.println("game init")
-	fmt.println(g.personaje.aabb)
-	fmt.println(atlas_animations[pNuevo.runAnim.atlas_anim].document_size)
-	fmt.println(g.personaje.size)
-	fmt.println("game init")
 
 	game_hot_reloaded(g)
 
