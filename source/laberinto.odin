@@ -391,26 +391,58 @@ dibujarLaberinto :: proc() {
 		}
 		rl.DrawLineEx(p.inicio, p.fin, p.thickness, draw_color)
 
-		/*if p.tipo != 2 {
+		if p.tipo != 2 {
 			if p.inicio.y == p.fin.y {
 				// horizontal
 
-				dest := rl.Rectangle {
-					p.inicio.x,
-					p.inicio.y,
-					abs(p.fin.x - p.inicio.x),
-					atlas_textures[.Pared_Frente].rect.height,
+				src_original := atlas_textures[.Pared].rect
+				ancho_textura := src_original.width
+				alto_textura := src_original.height
+
+				// Datos de la pared a dibujar
+				ancho_total := abs(p.fin.x - p.inicio.x)
+				x_actual := p.inicio.x
+				y_actual := p.inicio.y // Asumo que dibujas desde arriba-izquierda o ajustas el origin
+
+				// Variable para controlar cuánto nos falta por dibujar
+				ancho_restante := ancho_total
+
+				for ancho_restante > 0 {
+					// 1. Calculamos qué ancho vamos a dibujar en esta iteración.
+					//    Será el ancho completo de la textura, O lo que sobre (si es el final).
+					ancho_tramo := min(ancho_restante, ancho_textura)
+
+					// 2. Ajustamos el Source (recorte del atlas)
+					//    Si estamos al final, recortamos el source para no dibujar "aire" o el sprite vecino.
+					src_recorte := src_original
+					src_recorte.width = ancho_tramo
+					// Nota: Si tu sprite está rotado en el atlas, esto puede requerir ajustes,
+					// pero normalmente en atlas simples esto basta.
+
+					// 3. Definimos dónde va este tramo en el mundo
+					dest := rl.Rectangle {
+						x      = x_actual,
+						y      = y_actual,
+						width  = ancho_tramo,
+						height = alto_textura,
+					}
+
+					// 4. Dibujar
+					// Usamos el origin que te gusta (inferior-izquierda)
+					rl.DrawTexturePro(
+						g.atlas,
+						src_recorte,
+						dest,
+						rl.Vector2{0, alto_textura}, // Origin (Pivote)
+						0, // Rotación
+						rl.WHITE,
+					)
+
+					// 5. Avanzamos
+					x_actual += ancho_tramo
+					ancho_restante -= ancho_tramo
 				}
 
-
-				rl.DrawTexturePro(
-					g.atlas,
-					atlas_textures[.Pared_Frente].rect,
-					dest,
-					rl.Vector2{0, atlas_textures[.Pared_Frente].rect.height},
-					0,
-					rl.WHITE,
-				)
 			} else {
 				dest := rl.Rectangle {
 					p.inicio.x,
@@ -429,7 +461,7 @@ dibujarLaberinto :: proc() {
 				)
 
 			}
-		}*/
+		}
 
 
 	}

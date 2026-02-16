@@ -28,7 +28,7 @@ generate_collectibles :: proc(rows: int, cols: int) {
 	}
 	rand.shuffle(candidates[:])
 
-	tamCelda := f32(150)
+	tamCelda := f32(128 * 2)
 	for i in 0 ..< numCollectibles {
 		v := candidates[i]
 		cc := v % cols

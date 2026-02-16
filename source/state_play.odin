@@ -32,9 +32,11 @@ state_play_on_enter :: proc() {
 state_play_update :: proc() {
 	// call existing game update logic
 	dt := rl.GetFrameTime()
+	updatePersonaje(&g.personaje, dt) // el personaje siempre se actualiza independiente del fade_phase
+
 	// detectar colisión con pared de salida para iniciar fade (antes de resolver)
 	if g.fade_phase == 0 {
-		updatePersonaje(&g.personaje, dt)
+
 		update_enemies(dt)
 
 		for p in g.laberintoActual {
