@@ -69,6 +69,10 @@ Game_Memory :: struct {
 	atlas:                 rl.Texture,
 	titulo:                rl.Texture,
 	personaje:             Personaje,
+	shader_pared:          rl.Shader,
+	loc_player_pos:        i32,
+	loc_radius:            i32,
+	loc_screen_height:     i32,
 }
 
 g: ^Game_Memory
@@ -121,8 +125,14 @@ start_new_maze :: proc(newRows: int, newCols: int) {
 
 	g.personaje.aabb.width = g.personaje.size.x
 	g.personaje.aabb.height = g.personaje.size.y
-	g.personaje.aabb.x = g.personaje.pos.x - g.personaje.aabb.width / 2
-	g.personaje.aabb.y = g.personaje.pos.y - g.personaje.aabb.height / 2
+	g.personaje.aabb.x = g.personaje.pos.x
+	g.personaje.aabb.y = g.personaje.pos.y
+
+	g.personaje.hurtAABB.width = g.personaje.size.x
+	g.personaje.hurtAABB.height = g.personaje.size.y
+	g.personaje.hurtAABB.x = g.personaje.pos.x - g.personaje.hurtAABB.width / 3
+	g.personaje.hurtAABB.y = g.personaje.pos.y - g.personaje.hurtAABB.height / 3
+
 
 	fmt.println("start_new_maze player aabb", g.personaje.aabb)
 	fmt.println("pos inicial para el jugador en start_new_maze", g.personaje.pos)
@@ -193,7 +203,15 @@ game_init :: proc() {
 		laberintoActual      = paredes,
 		vEntrada             = vEnt,
 		vSalida              = vSal,
+		shader_pared         = rl.LoadShader(nil, "assets/wall_mask.fs"), // nil porque usamos el vertex shader por defecto
 	}
+
+	g.loc_player_pos = rl.GetShaderLocation(g.shader_pared, "playerPos")
+	g.loc_radius = rl.GetShaderLocation(g.shader_pared, "radius")
+	g.loc_screen_height = rl.GetShaderLocation(g.shader_pared, "screenHeight")
+
+	radio := f32(60.0)
+	rl.SetShaderValue(g.shader_pared, g.loc_radius, &radio, .FLOAT)
 
 	pNuevo := Personaje {
 		pos           = pos,
@@ -205,12 +223,18 @@ game_init :: proc() {
 		tint          = rl.YELLOW,
 	}
 
-	pNuevo.size = atlas_animations[pNuevo.runAnim.atlas_anim].document_size.xy // disponible despues de cargar las animaciones
+	pNuevo.size = {128, 128} // disponible despues de cargar las animaciones
 	pNuevo.aabb = rl.Rectangle {
-		x      = pNuevo.pos.x - pNuevo.size.x / 2,
-		y      = pNuevo.pos.y - pNuevo.size.y / 2,
+		x      = pNuevo.pos.x,
+		y      = pNuevo.pos.y,
 		width  = pNuevo.size.x,
 		height = pNuevo.size.y,
+	}
+	pNuevo.hurtAABB = rl.Rectangle {
+		x      = pNuevo.pos.x,
+		y      = pNuevo.pos.y,
+		width  = pNuevo.size.x / 3,
+		height = pNuevo.size.y / 3,
 	}
 
 	g.personaje = pNuevo

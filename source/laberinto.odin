@@ -143,6 +143,10 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 		predecesores = make([]int, filas * columnas),
 		distancias   = make([]int, filas * columnas),
 	}
+	defer delete(laberinto.ady)
+	defer delete(laberinto.visitados)
+	defer delete(laberinto.distancias)
+	defer delete(laberinto.predecesores)
 
 	// seleccionar un vértice de entrada aleatorio entre los vértices del borde
 	border := make([dynamic]int, context.temp_allocator)
@@ -353,8 +357,7 @@ crearLaberinto :: proc(filas: int, columnas: int, dificultad: int) -> ([dynamic]
 
 }
 
-dibujarLaberinto :: proc() {
-
+dibujarPiso :: proc() {
 	tamCelda := f32(128 * 2)
 	filas := g.maze_rows
 	columnas := g.maze_cols
@@ -375,7 +378,9 @@ dibujarLaberinto :: proc() {
 
 		}
 	}
+}
 
+dibujarLaberinto :: proc() {
 	paredes := g.laberintoActual
 
 	for p in paredes {

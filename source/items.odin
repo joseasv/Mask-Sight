@@ -17,6 +17,7 @@ generate_collectibles :: proc(rows: int, cols: int) {
 
 	// candidatos de celdas (excluir entrada/salida)
 	candidates := make([dynamic]int, 0)
+	defer delete(candidates)
 	for r in 0 ..< rows {
 		for c in 0 ..< cols {
 			v := r * cols + c

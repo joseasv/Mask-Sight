@@ -229,7 +229,8 @@ state_play_draw :: proc() {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.BLACK)
 
-	rl.BeginMode2D(game_camera())
+	cam := game_camera()
+	rl.BeginMode2D(cam)
 	// dibujar la textura centrada en `g.player_pos` (parpadeo si invencible)
 	visible := true
 	if g.inv_timer > 0.0 {
@@ -239,9 +240,28 @@ state_play_draw :: proc() {
 		}
 	}
 
-	dibujarLaberinto()
+	pos_en_pantalla := rl.GetWorldToScreen2D(g.personaje.pos, cam)
+
+	// 3. CORRECCIÓN DE DPI (Vital para monitores modernos)
+	// Obtenemos la escala del monitor (normalmente 1.0, pero puede ser 1.5 o 2.0)
+	dpi := rl.GetWindowScaleDPI()
+
+	// Ajustamos los valores para el Shader (que usa píxeles físicos)
+	pos_fisica := pos_en_pantalla * dpi
+	alto_fisico := f32(rl.GetRenderHeight()) * dpi.y
+	radio_fisico := f32(75.0) * dpi.x
+
+	// Enviamos los datos corregidos
+	rl.SetShaderValue(g.shader_pared, g.loc_player_pos, &pos_fisica, .VEC2)
+	rl.SetShaderValue(g.shader_pared, g.loc_screen_height, &alto_fisico, .FLOAT)
+	rl.SetShaderValue(g.shader_pared, g.loc_radius, &radio_fisico, .FLOAT)
+
+	dibujarPiso()
 	drawPersonaje(g.personaje, visible)
 
+	rl.BeginShaderMode(g.shader_pared)
+	dibujarLaberinto()
+	rl.EndShaderMode()
 
 	// dibujar collectibles
 	for c in g.collectibles {

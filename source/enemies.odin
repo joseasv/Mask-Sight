@@ -21,6 +21,7 @@ generate_enemies :: proc(rows: int, cols: int) {
 
 	// collect candidate wall centers
 	candidates := make([dynamic]rl.Vector2, 0)
+	defer delete(candidates)
 	for i in 0 ..< len(g.laberintoActual) {
 		p := g.laberintoActual[i]
 		// use wall center
@@ -118,7 +119,7 @@ update_enemies :: proc(dt: f32) {
 		for i in 0 ..< len(g.enemies) {
 			e := &g.enemies[i]
 			if e.alive {
-				if rl.CheckCollisionRecs(g.personaje.aabb, e.aabb) {
+				if rl.CheckCollisionRecs(g.personaje.hurtAABB, e.aabb) {
 					// only apply damage if not currently invincible
 					if g.inv_timer <= 0.0 {
 						// player takes damage

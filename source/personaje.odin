@@ -16,6 +16,7 @@ Personaje :: struct {
 	flip:          bool,
 	size:          [2]f32,
 	aabb:          rl.Rectangle,
+	hurtAABB:      rl.Rectangle,
 	runAnim:       AnimationFromAtlas,
 	runAttackAnim: AnimationFromAtlas,
 	idleAnim:      AnimationFromAtlas,
@@ -50,9 +51,10 @@ updatePersonaje :: proc(p: ^Personaje, dt: f32) {
 
 	if input.x == 0 && input.y == 0 {
 		animation_update(&p.idleAnim, dt)
+		p.size.x = 64
 		p.state = .Idle
 	} else {
-
+		p.size.x = 128
 		if g.internal_walls_timer > 0.0 {
 			animation_update(&p.runAttackAnim, dt)
 			p.state = .RunAttack
@@ -67,6 +69,13 @@ updatePersonaje :: proc(p: ^Personaje, dt: f32) {
 		y      = p.pos.y - p.size.y / 2,
 		width  = p.size.x,
 		height = p.size.y,
+	}
+
+	p.hurtAABB = rl.Rectangle {
+		x      = p.pos.x - p.size.x / 6,
+		y      = p.pos.y - p.size.y / 6,
+		width  = p.size.x / 3,
+		height = p.size.y / 3,
 	}
 
 	if g.reached_exit {
@@ -102,5 +111,14 @@ drawPersonaje :: proc(p: Personaje, visible: bool) {
 		i32(g.personaje.aabb.height),
 		rl.GREEN,
 	)
+
+	rl.DrawRectangleLines(
+		i32(g.personaje.hurtAABB.x),
+		i32(g.personaje.hurtAABB.y),
+		i32(g.personaje.hurtAABB.width),
+		i32(g.personaje.hurtAABB.height),
+		rl.RED,
+	)
+
 
 }
