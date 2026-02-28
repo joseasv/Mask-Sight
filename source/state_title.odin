@@ -24,8 +24,13 @@ state_title_update :: proc() {
 }
 
 state_title_draw :: proc() {
+	w := f32(rl.GetScreenWidth())
+	h := f32(rl.GetScreenHeight())
+
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.DARKGRAY)
+
+	rl.DrawTexture(g.titulo, i32(w/2) - i32(g.titulo.width/2), i32(h/2) - i32(g.titulo.height/2), rl.WHITE)
 
 	rl.DrawText("MASK-SIGHT", 120, 40, 48, rl.WHITE)
 	rl.DrawText(

@@ -188,7 +188,7 @@ game_init :: proc() {
 
 		// You can put textures, sounds and music in the `assets` folder. Those
 		// files will be part any release or web build.
-		titulo               = rl.LoadTexture("assets/titulo.png"),
+		titulo               = rl.LoadTexture("assets/Logo.png"),
 		atlas                = rl.LoadTexture("assets/atlas.png"),
 		// reveal internal walls at level start for a short grace period
 		show_internal_walls  = true,
