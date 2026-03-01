@@ -1,6 +1,6 @@
 package game
 
-import "core:fmt"
+//import "core:fmt"
 import rl "vendor:raylib"
 
 credits_visible: bool = false
@@ -16,7 +16,7 @@ state_title_update :: proc() {
 	if rl.IsKeyPressed(.THREE) {g.selected_difficulty = 3}
 	if rl.IsKeyPressed(.C) {credits_visible = !credits_visible}
 	if rl.IsKeyPressed(.ENTER) {
-		g.state_requested = int(GameState.Select)
+		g.state_requested = int(GameState.Play)
 	}
 	if rl.IsKeyPressed(.ESCAPE) {
 		g.run = false
@@ -30,18 +30,22 @@ state_title_draw :: proc() {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.DARKGRAY)
 
-	rl.DrawTexture(g.titulo, i32(w/2) - i32(g.titulo.width/2), i32(h/2) - i32(g.titulo.height/2), rl.WHITE)
-
-	rl.DrawText("MASK-SIGHT", 120, 40, 48, rl.WHITE)
-	rl.DrawText(
-		fmt.ctprintf("Dificultad: %v (1-3)", g.selected_difficulty),
-		120,
-		120,
-		20,
+	rl.DrawTexture(
+		g.titulo,
+		i32(w / 2) - i32(g.titulo.width / 2),
+		i32(h / 3) - i32(g.titulo.height / 2),
 		rl.WHITE,
 	)
-	rl.DrawText("Presiona ENTER para seleccionar personaje", 120, 160, 14, rl.RAYWHITE)
-	rl.DrawText("Presiona C para créditos", 120, 180, 12, rl.LIGHTGRAY)
+
+	texto: cstring = "Presiona ENTER para iniciar"
+	longitud := rl.MeasureText(texto, 32)
+	rl.DrawText(
+		"Presiona ENTER para iniciar",
+		i32(w / 2) - longitud / 2,
+		i32(h / 3) * 2,
+		32,
+		rl.RAYWHITE,
+	)
 
 	if credits_visible {
 		rl.DrawRectangle(80, 220, 560, 160, rl.BLACK)
@@ -56,3 +60,4 @@ state_title_draw :: proc() {
 
 	rl.EndDrawing()
 }
+

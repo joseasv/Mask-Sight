@@ -73,6 +73,13 @@ Game_Memory :: struct {
 	loc_player_pos:        i32,
 	loc_radius:            i32,
 	loc_screen_height:     i32,
+	textFadeTimer:         f32,
+	textFadingIn:          bool,
+	textFadeStates:        int, // 0 fade in, 1 espera, 2 fade out
+	textFadeInTime:        f32,
+	textFadeHoldTime:      f32,
+	textFadeOutTime:       f32,
+	textFadeAlpha:         f32,
 }
 
 g: ^Game_Memory
@@ -204,6 +211,9 @@ game_init :: proc() {
 		vEntrada             = vEnt,
 		vSalida              = vSal,
 		shader_pared         = rl.LoadShader(nil, "assets/wall_mask.fs"), // nil porque usamos el vertex shader por defecto
+		textFadeInTime       = 0.5,
+		textFadeOutTime      = 0.5,
+		textFadeHoldTime     = 2,
 	}
 
 	g.loc_player_pos = rl.GetShaderLocation(g.shader_pared, "playerPos")
@@ -305,3 +315,4 @@ game_force_restart :: proc() -> bool {
 game_parent_window_size_changed :: proc(w, h: int) {
 	rl.SetWindowSize(i32(w), i32(h))
 }
+
