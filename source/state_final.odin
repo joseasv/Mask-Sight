@@ -16,6 +16,13 @@ state_final_draw :: proc() {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.BLACK)
 
+	w := f32(rl.GetScreenWidth())
+	h := f32(rl.GetScreenHeight())
+
+	texto: cstring = "¡Saliste a la superficie! \nPresiona Enter para regresar al titulo."
+	longitud := rl.MeasureText(texto, 32)
+	rl.DrawText(texto, i32(w / 2) - longitud / 2, i32(h / 3) * 2, 32, rl.RAYWHITE)
+
 	// show a full-screen reveal image if available; fallback to player texture
 	/*w := rl.GetScreenWidth()
 	h := rl.GetScreenHeight()*/
@@ -33,3 +40,4 @@ state_final_draw :: proc() {
 
 	rl.EndDrawing()
 }
+

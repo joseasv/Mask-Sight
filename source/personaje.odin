@@ -30,7 +30,9 @@ updatePersonaje :: proc(p: ^Personaje, dt: f32) {
 	vel: f32 = 350
 	input: rl.Vector2
 
-	if g.fade_phase == 0 && g.stun_timer <= 0.0 {
+	if g.fade_phase == 0 &&
+	   g.stun_timer <= 0.0 &&
+	   g.textFadeTimer > g.textFadeInTime + g.textFadeHoldTime + g.textFadeOutTime {
 		if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) {
 			input.y -= 1
 		}
@@ -122,3 +124,4 @@ drawPersonaje :: proc(p: Personaje, visible: bool) {
 
 
 }
+
