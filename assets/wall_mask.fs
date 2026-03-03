@@ -36,3 +36,4 @@ void main()
 
     finalColor = texelColor * colDiffuse * fragColor;
 }
+

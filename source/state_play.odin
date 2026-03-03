@@ -264,9 +264,7 @@ state_play_update :: proc() {
 		}
 
 
-		if rl.IsKeyPressed(.ESCAPE) {
-			g.run = false
-		}
+		
 
 
 	}

@@ -189,6 +189,14 @@ game_init :: proc() {
 	pos := rl.Vector2{f32(col) * tamCelda + tamCelda / 2, f32(row) * tamCelda + tamCelda / 2}
 	fmt.println("pos inicial para el jugador en game_init", pos)
 
+	// Select shader path based on OS
+	shader_path: cstring // Use cstring for Raylib's C functions
+	when ODIN_OS == .JS { // Use the .JS enum member for the check
+		shader_path = "assets/wall_mask_web.fs"
+	} else {
+		shader_path = "assets/wall_mask.fs"
+	}
+
 	g^ = Game_Memory {
 		run                  = true,
 		some_number          = 100,
@@ -210,7 +218,7 @@ game_init :: proc() {
 		laberintoActual      = paredes,
 		vEntrada             = vEnt,
 		vSalida              = vSal,
-		shader_pared         = rl.LoadShader(nil, "assets/wall_mask.fs"), // nil porque usamos el vertex shader por defecto
+		shader_pared         = rl.LoadShader(nil, shader_path),
 		textFadeInTime       = 0.5,
 		textFadeOutTime      = 0.5,
 		textFadeHoldTime     = 2,
