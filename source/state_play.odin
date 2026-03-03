@@ -293,12 +293,12 @@ state_play_draw :: proc() {
 
 	// 3. CORRECCIÓN DE DPI (Vital para monitores modernos)
 	// Obtenemos la escala del monitor (normalmente 1.0, pero puede ser 1.5 o 2.0)
-	dpi := rl.GetWindowScaleDPI()
+	//dpi := rl.GetWindowScaleDPI()
 
 	// Ajustamos los valores para el Shader (que usa píxeles físicos)
-	pos_fisica := pos_en_pantalla * dpi
-	alto_fisico := f32(rl.GetRenderHeight()) * dpi.y
-	radio_fisico := f32(75.0) * dpi.x
+	pos_fisica := pos_en_pantalla
+	alto_fisico := f32(rl.GetRenderHeight())
+	radio_fisico := f32(75.0)
 
 	// Enviamos los datos corregidos
 	rl.SetShaderValue(g.shader_pared, g.loc_player_pos, &pos_fisica, .VEC2)
